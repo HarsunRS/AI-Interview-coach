@@ -1,20 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+Real-time, adaptive, voice-enabled mock interviews powered by AI
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/18CWVTJ3G7m_yrPUvO705YO8pc_NzsQ-d
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+This project is an end-to-end AI Interview Intelligence Platform designed to help candidates practice realistic interviews across technical, HR, behavioral, managerial, and system design rounds. It provides a highly interactive interview experience — including voice conversations, dynamic questioning, resume-based customization, and detailed performance analytics.
