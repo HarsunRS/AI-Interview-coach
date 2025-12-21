@@ -1,0 +1,8 @@
+{
+  "name": "AI Interview System",
+  "description": "A comprehensive AI-powered technical and behavioral interview platform featuring multiple interviewer personas, adaptive difficulty, and detailed performance reporting with proctoring.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
