@@ -24,26 +24,22 @@ export class InterviewService {
     
     const systemInstruction = `
       You are ${persona.name}, a ${persona.role} with a ${persona.style} style.
-      Candidate: ${profile.name || "Candidate"}.
+      Candidate Name: ${profile.name || "Candidate"}.
       Target Role: ${profile.role || "Not specified"}.
       Experience: ${profile.experienceLevel}.
-      Tech Stack: ${profile.techStack || "Not specified"}.
+      Stack: ${profile.techStack || "Not specified"}.
       
-      CONTEXTUAL DATA:
-      Resume/CV: ${profile.resumeText || "No resume provided."}
+      INPUT DATA:
+      Candidate Resume: ${profile.resumeText || "No resume provided."}
       Job Description: ${profile.jobDescription || "No JD provided."}
-      Round: ${profile.roundType}.
-      Mode: ${profile.interviewMode}.
-
-      CRITICAL TASK:
-      1. If a Job Description and Resume are both provided, compare them. Identify skill gaps or matching strengths and tailor your questions specifically to see if the candidate fits the role requirements.
-      2. If only one is provided, base your technical depth and context on that.
+      
+      INTERVIEW PROTOCOL:
+      1. ROLE FIT ANALYSIS: If both Resume and JD are provided, compare them. Ask questions that specifically target the gaps between the candidate's experience and the job requirements.
+      2. TAILORED DEPTH: Adjust technical complexity based on the Role and Tech Stack provided.
       3. Ask ONE question at a time.
-      4. ADAPTIVE DIFFICULTY: 
-         - Escalate difficulty if they answer with high competence.
-         - Provide hints or pivot to basics if they struggle.
-      5. Stay strictly in character. Do not provide feedback during the session.
-      6. Start by introducing yourself and mentioning how you've reviewed their profile/JD (if applicable).
+      4. ADAPTIVE LOGIC: Increase difficulty if the candidate is doing well; pivot if they struggle.
+      5. BE REALISTIC: Stay in character. Do not provide feedback or "Well done" during the conversation. 
+      6. START: Introduce yourself and mention you've reviewed their details (Resume/JD) before asking the first question.
     `;
 
     this.chat = ai.chats.create({
@@ -51,7 +47,7 @@ export class InterviewService {
       config: { systemInstruction, temperature: 0.7 }
     });
 
-    const response = await this.chat.sendMessage({ message: "Review the candidate's profile and the job requirements, then start the interview with an appropriate opening." });
+    const response = await this.chat.sendMessage({ message: "Review the profile context and start the interview session." });
     const text = response.text;
     const audio = await this.generateSpeech(text, persona.voice);
 
@@ -90,11 +86,14 @@ export class InterviewService {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `
-        Analyze this interview transcript and generate a professional JSON report.
+        Analyze this interview transcript and produce a detailed JSON report.
+        Focus on:
+        - Technical competence vs the required Role/Stack.
+        - Communication effectiveness.
+        - Behavioral indicators.
+        
         Transcript:
         ${history}
-        
-        Evaluate the "Role Fit" based on the CV vs JD comparison if both were present in the context.
       `,
       config: {
         responseMimeType: "application/json",
@@ -183,9 +182,7 @@ export class InterviewService {
     if (this.currentAudioSource) {
       try {
         this.currentAudioSource.stop();
-      } catch (e) {
-        // Source might already be stopped
-      }
+      } catch (e) {}
       this.currentAudioSource = null;
     }
   }

@@ -96,7 +96,7 @@ const App: React.FC = () => {
       setReport(result);
       setView('report');
     } catch (error) {
-      console.error("Failed to generate report", error);
+      console.error("Evaluation error:", error);
       setView('dashboard');
     }
   };
@@ -115,9 +115,9 @@ const App: React.FC = () => {
           <div className="flex justify-end">
              <button 
               onClick={handleLogout}
-              className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors p-2"
+              className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors px-2 py-4"
             >
-              Sign Out
+              Log Out Session
             </button>
           </div>
           <Dashboard 
@@ -149,12 +149,12 @@ const App: React.FC = () => {
       {view === 'loading' && (
         <div className="flex flex-col items-center justify-center h-[60vh] space-y-8 text-center animate-in fade-in zoom-in-95">
           <div className="relative">
-            <div className="w-24 h-24 border-8 border-slate-200 border-t-blue-600 rounded-full animate-spin shadow-2xl shadow-blue-500/10"></div>
+            <div className="w-24 h-24 border-8 border-slate-200 border-t-blue-600 rounded-full animate-spin shadow-2xl"></div>
             <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-black text-xs">AI</div>
           </div>
           <div className="space-y-3">
-            <h3 className={`text-3xl font-black tracking-tight ${profile.theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Generating Report...</h3>
-            <p className="text-slate-500 max-w-sm font-medium">Comparing transcript with requirements, analyzing speech patterns, and calculating performance metrics.</p>
+            <h3 className={`text-3xl font-black tracking-tight ${profile.theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Finalizing Evaluation...</h3>
+            <p className="text-slate-500 max-w-sm font-medium">Matching your responses against the JD & Resume data to build your success roadmap.</p>
           </div>
         </div>
       )}
