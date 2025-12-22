@@ -1,19 +1,18 @@
 {
   "name": "ai-mock-interviewer-backend",
   "version": "1.0.0",
-  "description": "Backend API for AI Mock Interviewer App",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only server.ts",
-    "build": "tsc",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "rm -rf dist && tsc",
     "start": "node dist/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "google": "^4.4.0"
+    "@google/generative-ai": "^0.11.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
