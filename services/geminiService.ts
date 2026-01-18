@@ -1,15 +1,19 @@
 
 import { GoogleGenAI, Type, Chat, Modality } from "@google/genai";
-import { UserProfile, Report, InterviewMode } from "../types";
+import { UserProfile, Report } from "../types";
 import { PERSONAS } from "../constants";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export class InterviewService {
   private chat: Chat | null = null;
   private profile: UserProfile | null = null;
   private audioContext: AudioContext | null = null;
   private currentAudioSource: AudioBufferSourceNode | null = null;
+
+  // Helper to create a fresh AI instance with the current API key
+  private getAI() {
+    const apiKey = process.env.API_KEY || '';
+    return new GoogleGenAI({ apiKey });
+  }
 
   private async getAudioContext() {
     if (!this.audioContext) {
@@ -40,6 +44,7 @@ export class InterviewService {
       4. Be extremely realistic. Do not give feedback or praise.
     `;
 
+    const ai = this.getAI();
     this.chat = ai.chats.create({
       model: 'gemini-3-flash-preview',
       config: { systemInstruction, temperature: 0.7 }
@@ -63,6 +68,7 @@ export class InterviewService {
 
   async generateSpeech(text: string, voice: string): Promise<string | undefined> {
     try {
+      const ai = this.getAI();
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
@@ -75,11 +81,13 @@ export class InterviewService {
       });
       return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     } catch (e) {
+      console.error("Gemini TTS Error:", e);
       return undefined;
     }
   }
 
   async generateReport(history: string): Promise<Report> {
+    const ai = this.getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Generate a high-fidelity JSON interview report based on this transcript: ${history}. 
@@ -163,7 +171,7 @@ export class InterviewService {
       }
     });
 
-    return JSON.parse(response.text);
+    return JSON.parse(response.text || '{}');
   }
 
   async playAudio(base64: string) {
