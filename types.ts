@@ -8,9 +8,6 @@ export enum InterviewMode {
 export enum RoundType {
   TECHNICAL = 'Technical',
   HR = 'HR / Behavioral',
-  BEHAVIORAL = 'Behavioral',
-  SYSTEM_DESIGN = 'System Design',
-  MANAGERIAL = 'Managerial',
   MIXED = 'Mixed'
 }
 
@@ -87,21 +84,9 @@ export interface Report {
     setupQuality: { score: number; lighting: string };
     energyLevel: { score: number; consistency: string };
   };
-  timelineAnalysis: { time: string; event: string; tip: string }[];
-  communicationAnalysis: {
-    avgResponseTime: string;
-    longestPause: string;
-    speakingPace: string;
-    fillerWords: number;
-    speakingTime: string;
-    totalTime: string;
-  };
-  strengths: string[];
-  weaknesses: string[];
   roadmap: {
     technical: string[];
     communication: string[];
-    behavioral: string[];
   };
   questionBreakdown: QuestionEvaluation[];
 }

@@ -50,8 +50,9 @@ const App: React.FC = () => {
   };
 
   const toggleTheme = () => {
-    const newTheme = profile.theme === 'light' ? 'dark' : 'light';
-    const newProfile = { ...profile, theme: newTheme };
+    // Explicitly typing newTheme and newProfile to fix theme literal type mismatch (string vs 'light' | 'dark')
+    const newTheme: 'light' | 'dark' = profile.theme === 'light' ? 'dark' : 'light';
+    const newProfile: UserProfile = { ...profile, theme: newTheme };
     if (currentUser) syncUserData(newProfile, history);
     else setProfile(newProfile);
   };
