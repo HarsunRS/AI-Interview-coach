@@ -91,7 +91,7 @@ export class InterviewService {
 
   async generateReport(history: string): Promise<Report> {
     const ai = this.getAI();
-    // Use gemini-3-flash-preview for FAST high-quality report generation
+    // Using flash model for high speed evaluation as requested
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Audit this interview history for technical accuracy, scenario performance, and pronunciation. 

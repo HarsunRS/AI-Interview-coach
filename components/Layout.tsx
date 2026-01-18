@@ -9,8 +9,8 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, theme, toggleTheme }) => {
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300 ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      <header className={`border-b shrink-0 z-50 transition-colors duration-300 h-16 ${theme === 'dark' ? 'bg-[#020617]/80 backdrop-blur-md border-white/5' : 'bg-white/80 backdrop-blur-md border-slate-200'}`}>
+    <div className={`min-h-screen w-full flex flex-col transition-colors duration-300 ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      <header className={`sticky top-0 border-b shrink-0 z-[100] transition-colors duration-300 h-16 ${theme === 'dark' ? 'bg-[#020617]/80 backdrop-blur-md border-white/5' : 'bg-white/80 backdrop-blur-md border-slate-200'}`}>
         <div className="max-w-[1920px] mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -33,8 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ children, theme, toggleTheme }) => {
           </div>
         </div>
       </header>
-      {/* Main is now scrollable for dashboard/report, while ChatInterface uses absolute positioning to "lock" itself when active */}
-      <main className="flex-1 relative bg-inherit overflow-y-auto scrollbar-hide">
+      <main className="flex-1 relative bg-inherit">
         {children}
       </main>
     </div>
