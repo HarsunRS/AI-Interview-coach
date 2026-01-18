@@ -9,10 +9,8 @@ export class InterviewService {
   private audioContext: AudioContext | null = null;
   private currentAudioSource: AudioBufferSourceNode | null = null;
 
-  // Helper to create a fresh AI instance with the current API key
   private getAI() {
-    const apiKey = process.env.API_KEY || '';
-    return new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
   private async getAudioContext() {
@@ -27,30 +25,35 @@ export class InterviewService {
     const persona = PERSONAS.find(p => p.id === profile.interviewerPersonaId) || PERSONAS[0];
     
     const systemInstruction = `
-      You are ${persona.name}, a ${persona.role} with a ${persona.style} style.
+      You are ${persona.name}, acting as a ${persona.role}. Your interviewing style is ${persona.style}.
       
-      CONTEXT:
-      Candidate: ${profile.name}
-      Experience: ${profile.experienceLevel}
-      Skills: ${profile.techStack.join(', ')}
-      Goal: ${profile.interviewGoal} ${profile.targetCompany ? `at ${profile.targetCompany}` : ''}
-      Resume Context: ${profile.resumeText}
-      JD Context: ${profile.jobDescription}
+      SESSION CONTEXT:
+      - Candidate's Goal: "${profile.interviewGoal}"
+      - Target Company: ${profile.targetCompany || 'a high-stakes technology firm'}
+      - Role: ${profile.rolePreference === 'Specific Role' ? profile.role : 'Core Professional'}
+      - Experience: ${profile.experienceLevel}
+      - Stack: ${profile.techStack.join(', ')}
+      - Context: ${profile.resumeText || 'No Resume Provided'}
 
-      INSTRUCTIONS:
-      1. Conduct a professional interview. If a JD and Resume are present, perform a FIT ANALYSIS.
-      2. Ask ONE question at a time.
-      3. Start by introducing yourself and stating the goal of the session.
-      4. Be extremely realistic. Do not give feedback or praise.
+      SCENARIO-BASED INSTRUCTION:
+      1. START IMMEDIATELY: Set a specific workplace scenario related to their target company or role. 
+         e.g., "Welcome. We're currently dealing with a critical bottleneck in our ${profile.techStack[0] || 'backend'} pipeline. Before we dive into the details, walk me through..."
+      2. USE RESUME: Refer to a specific project or skill in their resume context.
+      3. ADAPTIVE CHALLENGE: Escalate technical difficulty based on their depth. 
+      4. ONE QUESTION: Ask exactly one high-impact question to open. No excessive pleasantries.
     `;
 
     const ai = this.getAI();
     this.chat = ai.chats.create({
       model: 'gemini-3-flash-preview',
-      config: { systemInstruction, temperature: 0.7 }
+      config: { 
+        systemInstruction, 
+        temperature: 0.8,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
 
-    const response = await this.chat.sendMessage({ message: "Hello, I am ready to start the interview. Please begin." });
+    const response = await this.chat.sendMessage({ message: "The candidate has entered. Start the scenario." });
     const text = response.text;
     const audio = await this.generateSpeech(text, persona.voice);
 
@@ -81,17 +84,21 @@ export class InterviewService {
       });
       return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     } catch (e) {
-      console.error("Gemini TTS Error:", e);
+      console.error("TTS Error:", e);
       return undefined;
     }
   }
 
   async generateReport(history: string): Promise<Report> {
     const ai = this.getAI();
+    // Use gemini-3-flash-preview for FAST high-quality report generation
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Generate a high-fidelity JSON interview report based on this transcript: ${history}. 
-      Include detailed metrics for technical accuracy, communication, confidence, and behavioral aspects like eye contact and body language (simulate these based on the tone and content).`,
+      model: 'gemini-3-flash-preview',
+      contents: `Audit this interview history for technical accuracy, scenario performance, and pronunciation. 
+      Return a STRICT JSON evaluation.
+      
+      HISTORY:
+      ${history}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -107,7 +114,18 @@ export class InterviewService {
                 technicalAccuracy: { type: Type.NUMBER },
                 communication: { type: Type.NUMBER },
                 problemSolving: { type: Type.NUMBER },
-                confidence: { type: Type.NUMBER }
+                confidence: { type: Type.NUMBER },
+                pronunciation: { type: Type.NUMBER },
+                fluency: { type: Type.NUMBER }
+              }
+            },
+            speechAnalysis: {
+              type: Type.OBJECT,
+              properties: {
+                clarityScore: { type: Type.NUMBER },
+                pace: { type: Type.STRING },
+                fillerWordUsage: { type: Type.STRING },
+                pronunciationGaps: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             },
             behavioralAnalysis: {
@@ -121,25 +139,11 @@ export class InterviewService {
                 energyLevel: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, consistency: { type: Type.STRING } } }
               }
             },
-            communicationAnalysis: {
-              type: Type.OBJECT,
-              properties: {
-                avgResponseTime: { type: Type.STRING },
-                longestPause: { type: Type.STRING },
-                speakingPace: { type: Type.STRING },
-                fillerWords: { type: Type.NUMBER },
-                speakingTime: { type: Type.STRING },
-                totalTime: { type: Type.STRING }
-              }
-            },
-            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-            weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
             roadmap: {
               type: Type.OBJECT,
               properties: {
                 technical: { type: Type.ARRAY, items: { type: Type.STRING } },
-                communication: { type: Type.ARRAY, items: { type: Type.STRING } },
-                behavioral: { type: Type.ARRAY, items: { type: Type.STRING } }
+                communication: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             },
             questionBreakdown: {
@@ -162,6 +166,7 @@ export class InterviewService {
                       areasToImprove: { type: Type.ARRAY, items: { type: Type.STRING } }
                     }
                   },
+                  pronunciationFeedback: { type: Type.STRING },
                   interviewerNotes: { type: Type.STRING }
                 }
               }
@@ -171,7 +176,11 @@ export class InterviewService {
       }
     });
 
-    return JSON.parse(response.text || '{}');
+    try {
+      return JSON.parse(response.text || '{}');
+    } catch (e) {
+      throw new Error("Evaluation parsing failed.");
+    }
   }
 
   async playAudio(base64: string) {

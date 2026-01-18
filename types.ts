@@ -63,6 +63,7 @@ export interface QuestionEvaluation {
     areasToImprove: string[];
   };
   interviewerNotes: string;
+  pronunciationFeedback?: string;
 }
 
 export interface Report {
@@ -75,6 +76,8 @@ export interface Report {
     communication: number;
     problemSolving: number;
     confidence: number;
+    pronunciation: number;
+    fluency: number;
   };
   behavioralAnalysis: {
     score: number;
@@ -83,6 +86,12 @@ export interface Report {
     facialExpression: { score: number; engagement: string; nervousness: string };
     setupQuality: { score: number; lighting: string };
     energyLevel: { score: number; consistency: string };
+  };
+  speechAnalysis: {
+    clarityScore: number;
+    pace: 'Too Fast' | 'Too Slow' | 'Optimal';
+    fillerWordUsage: 'High' | 'Low' | 'Moderate';
+    pronunciationGaps: string[];
   };
   roadmap: {
     technical: string[];
