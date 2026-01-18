@@ -1,5 +1,5 @@
 
-import { InterviewerPersona, InterviewMode, RoundType, InterviewHistoryItem } from './types';
+import { InterviewerPersona, InterviewMode, RoundType, InterviewHistoryItem, UserProfile } from './types';
 
 export const PERSONAS: InterviewerPersona[] = [
   {
@@ -19,51 +19,32 @@ export const PERSONAS: InterviewerPersona[] = [
     description: 'Meera looks for culture fit and soft skills. She is empathetic but insightful about career trajectory.',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Meera',
     voice: 'Kore'
-  },
-  {
-    id: 'karan',
-    name: 'Karan',
-    role: 'Engineering Manager',
-    style: 'Pragmatic & Managerial',
-    description: 'Karan bridges the gap between technical depth and business value. He values problem-solving and collaboration.',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Karan',
-    voice: 'Zephyr'
-  },
-  {
-    id: 'elara',
-    name: 'Elara',
-    role: 'Product Specialist',
-    style: 'Creative & Visionary',
-    description: 'Elara focuses on user-centric design, product-market fit, and high-level strategy.',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Elara',
-    voice: 'Puck'
-  },
-  {
-    id: 'victor',
-    name: 'Victor',
-    role: 'System Architect',
-    style: 'Methodical & Complex',
-    description: 'Victor tests your ability to design robust distributed systems and handle massive scale.',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Victor',
-    voice: 'Fenrir'
   }
 ];
 
-export const MOCK_HISTORY: InterviewHistoryItem[] = [];
+export const COMMON_SKILLS = [
+  'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java', 'SQL', 'Data Structures'
+];
 
-export const INITIAL_USER_PROFILE = {
+export const COMPANIES = [
+  'Google', 'Amazon', 'Microsoft', 'Meta', 'Apple', 'Netflix', 'Tesla', 'Uber', 'Airbnb', 'LinkedIn'
+];
+
+export const INITIAL_USER_PROFILE: UserProfile = {
   name: '',
+  email: '',
   avatarSeed: 'User',
   role: '',
-  techStack: '',
-  experienceLevel: 'Junior (0-2 years)',
+  techStack: [],
+  experienceLevel: '',
   resumeText: '',
   jobDescription: '',
   interviewMode: InterviewMode.QUICK,
-  roundType: RoundType.MIXED,
+  roundType: RoundType.TECHNICAL,
   interviewerPersonaId: 'aarav',
   preferredLanguage: 'English',
-  voiceAccent: 'Neutral',
   timeLimit: 30,
-  theme: 'light' as const
+  theme: 'light',
+  rolePreference: 'Overall Practice',
+  interviewGoal: 'Check my preparation'
 };

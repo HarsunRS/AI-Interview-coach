@@ -1,13 +1,13 @@
 
 export enum InterviewMode {
-  QUICK = 'Quick Practice',
+  QUICK = 'Quick Mock',
   FULL = 'Full Mock',
   SIMULATION = 'Company Simulation'
 }
 
 export enum RoundType {
   TECHNICAL = 'Technical',
-  HR = 'HR',
+  HR = 'HR / Behavioral',
   BEHAVIORAL = 'Behavioral',
   SYSTEM_DESIGN = 'System Design',
   MANAGERIAL = 'Managerial',
@@ -34,9 +34,10 @@ export interface UserAccount {
 
 export interface UserProfile {
   name: string;
+  email: string;
   role: string;
   avatarSeed: string;
-  techStack: string;
+  techStack: string[];
   experienceLevel: string;
   resumeText: string;
   jobDescription?: string;
@@ -44,9 +45,11 @@ export interface UserProfile {
   roundType: RoundType;
   interviewerPersonaId: string;
   preferredLanguage: string;
-  voiceAccent: string;
   timeLimit: number;
   theme: 'light' | 'dark';
+  rolePreference: 'Specific Role' | 'Overall Practice';
+  interviewGoal: 'Check my preparation' | 'Prepare for a specific company' | 'Improve communication & confidence';
+  targetCompany?: string;
 }
 
 export interface QuestionEvaluation {
@@ -54,37 +57,52 @@ export interface QuestionEvaluation {
   userAnswer: string;
   idealAnswer: string;
   type: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
   correctness: number; 
-  depth: number; 
-  clarity: number; 
-  structure: number; 
+  duration: string;
   tag: 'Excellent' | 'Partial' | 'Weak';
-  feedback: string;
+  feedback: {
+    whatWentWell: string[];
+    areasToImprove: string[];
+  };
+  interviewerNotes: string;
 }
 
 export interface Report {
   summary: string;
   overallScore: number;
   label: 'Beginner' | 'Intermediate' | 'Interview Ready' | 'Strong';
-  skillScores: { name: string; score: number }[];
-  communication: {
-    fluency: number;
-    clarity: number;
-    fillerWordsCount: number;
-    grammarScore: number;
-    pronunciationScore: number;
-    pronunciationFeedback: string;
-  };
-  behavioral: {
+  duration: string;
+  metrics: {
+    technicalAccuracy: number;
+    communication: number;
+    problemSolving: number;
     confidence: number;
-    ownership: number;
-    leadership: number;
   };
-  proctoringLogs: string[];
+  behavioralAnalysis: {
+    score: number;
+    eyeContact: { score: number; percentage: string; avg: string };
+    bodyLanguage: { score: number; posture: string; gestures: string };
+    facialExpression: { score: number; engagement: string; nervousness: string };
+    setupQuality: { score: number; lighting: string };
+    energyLevel: { score: number; consistency: string };
+  };
+  timelineAnalysis: { time: string; event: string; tip: string }[];
+  communicationAnalysis: {
+    avgResponseTime: string;
+    longestPause: string;
+    speakingPace: string;
+    fillerWords: number;
+    speakingTime: string;
+    totalTime: string;
+  };
   strengths: string[];
   weaknesses: string[];
-  improvementPlan: string[];
-  recommendedPractice: string[];
+  roadmap: {
+    technical: string[];
+    communication: string[];
+    behavioral: string[];
+  };
   questionBreakdown: QuestionEvaluation[];
 }
 
@@ -93,6 +111,7 @@ export interface Message {
   text: string;
   timestamp: Date;
   audioData?: string;
+  timeLabel: string;
 }
 
 export interface InterviewHistoryItem {

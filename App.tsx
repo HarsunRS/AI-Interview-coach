@@ -25,20 +25,11 @@ const App: React.FC = () => {
 
   const syncUserData = (updatedProfile: UserProfile, updatedHistory: InterviewHistoryItem[]) => {
     if (!currentUser) return;
-    
     const savedUsers: UserAccount[] = JSON.parse(localStorage.getItem('ip_users') || '[]');
-    const updatedUsers = savedUsers.map(u => {
-      if (u.email === currentUser.email) {
-        return { ...u, profile: updatedProfile, history: updatedHistory };
-      }
-      return u;
-    });
-    
+    const updatedUsers = savedUsers.map(u => u.email === currentUser.email ? { ...u, profile: updatedProfile, history: updatedHistory } : u);
     const updatedSession = { ...currentUser, profile: updatedProfile, history: updatedHistory };
-    
     localStorage.setItem('ip_users', JSON.stringify(updatedUsers));
     localStorage.setItem('ip_session', JSON.stringify(updatedSession));
-    
     setCurrentUser(updatedSession);
     setProfile(updatedProfile);
     setHistory(updatedHistory);
@@ -61,11 +52,8 @@ const App: React.FC = () => {
   const toggleTheme = () => {
     const newTheme = profile.theme === 'light' ? 'dark' : 'light';
     const newProfile = { ...profile, theme: newTheme };
-    if (currentUser) {
-      syncUserData(newProfile, history);
-    } else {
-      setProfile(newProfile);
-    }
+    if (currentUser) syncUserData(newProfile, history);
+    else setProfile(newProfile);
   };
 
   const handleStartSetup = () => setView('setup');
@@ -78,8 +66,9 @@ const App: React.FC = () => {
   const handleCompleteInterview = async (transcript: string, logs: string[]) => {
     setView('loading');
     try {
-      const result = await interviewService.generateReport(transcript);
-      result.proctoringLogs = logs;
+      // Include proctoring logs in the eval context
+      const fullContext = `Proctoring Logs: ${logs.join(' | ')} \n\n Transcript: ${transcript}`;
+      const result = await interviewService.generateReport(fullContext);
       
       const newHistoryItem: InterviewHistoryItem = {
         id: Date.now().toString(),
@@ -90,82 +79,43 @@ const App: React.FC = () => {
         status: result.label,
         report: result
       };
-
+      
       const updatedHistory = [newHistoryItem, ...history];
       syncUserData(profile, updatedHistory);
       setReport(result);
       setView('report');
     } catch (error) {
-      console.error("Evaluation error:", error);
+      console.error("Evaluation Error:", error);
       setView('dashboard');
     }
-  };
-
-  const handleReset = () => {
-    setReport(null);
-    setView('dashboard');
   };
 
   return (
     <Layout theme={profile.theme} toggleTheme={toggleTheme}>
       {view === 'auth' && <Auth onLogin={handleLogin} theme={profile.theme} />}
-
       {view === 'dashboard' && currentUser && (
         <div className="space-y-4">
           <div className="flex justify-end">
-             <button 
-              onClick={handleLogout}
-              className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors px-2 py-4"
-            >
-              Log Out Session
-            </button>
+             <button onClick={handleLogout} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors p-4">Sign Out</button>
           </div>
-          <Dashboard 
-            profile={profile} 
-            history={history} 
-            onStart={handleStartSetup} 
-            onViewReport={(rep) => { setReport(rep); setView('report'); }}
-            theme={profile.theme}
-          />
+          <Dashboard profile={profile} history={history} onStart={handleStartSetup} onViewReport={(rep) => { setReport(rep); setView('report'); }} theme={profile.theme} />
         </div>
       )}
-      
-      {view === 'setup' && (
-        <SetupForm 
-          onStart={handleConfirmProfile} 
-          onCancel={() => setView('dashboard')} 
-          theme={profile.theme}
-        />
-      )}
-      
-      {view === 'interview' && (
-        <ChatInterface 
-          profile={profile} 
-          onComplete={handleCompleteInterview} 
-          theme={profile.theme}
-        />
-      )}
-
+      {view === 'setup' && <SetupForm onStart={handleConfirmProfile} onCancel={() => setView('dashboard')} theme={profile.theme} />}
+      {view === 'interview' && <ChatInterface profile={profile} onComplete={handleCompleteInterview} theme={profile.theme} />}
       {view === 'loading' && (
         <div className="flex flex-col items-center justify-center h-[60vh] space-y-8 text-center animate-in fade-in zoom-in-95">
           <div className="relative">
             <div className="w-24 h-24 border-8 border-slate-200 border-t-blue-600 rounded-full animate-spin shadow-2xl"></div>
-            <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-black text-xs">AI</div>
+            <div className="absolute inset-0 flex items-center justify-center text-blue-600 font-black text-xs uppercase tracking-tighter">AI Lab</div>
           </div>
           <div className="space-y-3">
-            <h3 className={`text-3xl font-black tracking-tight ${profile.theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Finalizing Evaluation...</h3>
-            <p className="text-slate-500 max-w-sm font-medium">Matching your responses against the JD & Resume data to build your success roadmap.</p>
+            <h3 className={`text-3xl font-black tracking-tight ${profile.theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Evaluating Your Session...</h3>
+            <p className="text-slate-500 max-w-sm font-bold leading-relaxed uppercase tracking-tighter text-[10px]">Processing transcript, behavioral markers, and technical accuracy to build your roadmap.</p>
           </div>
         </div>
       )}
-
-      {view === 'report' && report && (
-        <ReportView 
-          report={report} 
-          onReset={handleReset} 
-          theme={profile.theme}
-        />
-      )}
+      {view === 'report' && report && <ReportView report={report} onReset={() => setView('dashboard')} theme={profile.theme} />}
     </Layout>
   );
 };
