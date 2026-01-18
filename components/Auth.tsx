@@ -52,28 +52,28 @@ const Auth: React.FC<AuthProps> = ({ onLogin, theme }) => {
   const inputClass = theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900';
 
   return (
-    <div className="max-w-md mx-auto mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className={`${cardBg} p-8 rounded-[2.5rem] shadow-2xl border`}>
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-500/20">
-            <span className="text-white font-black text-2xl">IP</span>
+    <div className="max-w-md mx-auto mt-20 animate-in fade-in slide-in-from-bottom-6 duration-500">
+      <div className={`${cardBg} p-10 rounded-[3rem] shadow-2xl border`}>
+        <div className="text-center mb-10">
+          <div className="w-20 h-20 bg-blue-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-500/20">
+            <span className="text-white font-black text-3xl">IP</span>
           </div>
-          <h2 className={`text-2xl font-black ${textPrimary}`}>
-            {isRegistering ? 'Create Account' : 'Welcome Back'}
+          <h2 className={`text-3xl font-black ${textPrimary}`}>
+            {isRegistering ? 'Start Training' : 'Welcome Back'}
           </h2>
-          <p className="text-slate-500 text-sm mt-2">
-            {isRegistering ? 'Start your AI interview journey today' : 'Login to your personalized prep dashboard'}
+          <p className="text-slate-500 text-sm mt-3 font-medium">
+            {isRegistering ? 'Join 10k+ candidates prep' : 'Login to your preparation terminal'}
           </p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-5">
           {isRegistering && (
             <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Full Name</label>
+              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-1">Full Name</label>
               <input 
                 type="text" 
                 required
-                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all ${inputClass}`}
+                className={`w-full px-5 py-4 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all font-bold ${inputClass}`}
                 placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -81,22 +81,22 @@ const Auth: React.FC<AuthProps> = ({ onLogin, theme }) => {
             </div>
           )}
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Email Address</label>
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-1">Email Address</label>
             <input 
               type="email" 
               required
-              className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all ${inputClass}`}
+              className={`w-full px-5 py-4 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all font-bold ${inputClass}`}
               placeholder="name@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2 ml-1">Password</label>
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-1">Password</label>
             <input 
               type="password" 
               required
-              className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all ${inputClass}`}
+              className={`w-full px-5 py-4 rounded-xl border focus:ring-2 focus:ring-blue-600 outline-none transition-all font-bold ${inputClass}`}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -107,27 +107,24 @@ const Auth: React.FC<AuthProps> = ({ onLogin, theme }) => {
 
           <button 
             type="submit"
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all mt-6"
+            className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all mt-8 uppercase text-xs tracking-widest"
           >
-            {isRegistering ? 'Sign Up' : 'Login'}
+            {isRegistering ? 'Create Account' : 'Authenticate'}
           </button>
         </form>
 
-        <div className="mt-8 text-center">
+        <div className="mt-10 text-center">
           <button 
             onClick={() => {
               setIsRegistering(!isRegistering);
               setError('');
             }}
-            className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors"
+            className="text-xs font-black text-blue-600 hover:text-blue-700 transition-colors uppercase tracking-widest"
           >
-            {isRegistering ? 'Already have an account? Login' : 'New to Interview Pro? Create account'}
+            {isRegistering ? 'Already have an account? Login' : 'Need an account? Sign Up'}
           </button>
         </div>
       </div>
-      <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-8">
-        Secure & Private AI Evaluation
-      </p>
     </div>
   );
 };
