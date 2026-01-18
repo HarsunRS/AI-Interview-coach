@@ -25,22 +25,20 @@ export class InterviewService {
     const persona = PERSONAS.find(p => p.id === profile.interviewerPersonaId) || PERSONAS[0];
     
     const systemInstruction = `
-      You are ${persona.name}, acting as a ${persona.role}. Your interviewing style is ${persona.style}.
+      You are ${persona.name}, acting as a ${persona.role}. Your style is ${persona.style}.
       
-      SESSION CONTEXT:
-      - Candidate's Goal: "${profile.interviewGoal}"
-      - Target Company: ${profile.targetCompany || 'a high-stakes technology firm'}
-      - Role: ${profile.rolePreference === 'Specific Role' ? profile.role : 'Core Professional'}
-      - Experience: ${profile.experienceLevel}
-      - Stack: ${profile.techStack.join(', ')}
-      - Context: ${profile.resumeText || 'No Resume Provided'}
+      CRITICAL DIRECTIVE: You are the lead interviewer. 
+      1. You MUST start the interview immediately.
+      2. You MUST present a realistic technical scenario or behavioral challenge.
+      3. You MUST end every single response with exactly ONE clear, direct question for the candidate.
+      4. Never be passive. Do not wait for the candidate to lead. 
+      5. Keep your responses concise (under 3 sentences) but punchy.
 
-      SCENARIO-BASED INSTRUCTION:
-      1. START IMMEDIATELY: Set a specific workplace scenario related to their target company or role. 
-         e.g., "Welcome. We're currently dealing with a critical bottleneck in our ${profile.techStack[0] || 'backend'} pipeline. Before we dive into the details, walk me through..."
-      2. USE RESUME: Refer to a specific project or skill in their resume context.
-      3. ADAPTIVE CHALLENGE: Escalate technical difficulty based on their depth. 
-      4. ONE QUESTION: Ask exactly one high-impact question to open. No excessive pleasantries.
+      SESSION CONTEXT:
+      - Goal: ${profile.interviewGoal}
+      - Technology Focus: ${profile.techStack.join(', ')}
+      - Seniority: ${profile.experienceLevel}
+      - Target Company: ${profile.targetCompany || 'General Industry'}
     `;
 
     const ai = this.getAI();
@@ -49,21 +47,20 @@ export class InterviewService {
       config: { 
         systemInstruction, 
         temperature: 0.8,
-        thinkingConfig: { thinkingBudget: 0 }
       }
     });
 
-    const response = await this.chat.sendMessage({ message: "The candidate has entered. Start the scenario." });
-    const text = response.text;
+    const response = await this.chat.sendMessage({ message: "SYSTEM_SIGNAL: Candidate has entered the room. Start the interview now with your first scenario and question." });
+    const text = response.text || "Connection established. Let's begin. Can you tell me about a complex project you've worked on recently?";
     const audio = await this.generateSpeech(text, persona.voice);
 
     return { text, audio };
   }
 
   async sendMessage(message: string): Promise<{ text: string, audio?: string }> {
-    if (!this.chat) throw new Error("Not initialized");
+    if (!this.chat) throw new Error("Neural link not established.");
     const response = await this.chat.sendMessage({ message });
-    const text = response.text;
+    const text = response.text || "I see. Let's move to the next topic. How do you handle tight deadlines?";
     const persona = PERSONAS.find(p => p.id === this.profile?.interviewerPersonaId) || PERSONAS[0];
     const audio = await this.generateSpeech(text, persona.voice);
     return { text, audio };
@@ -84,25 +81,29 @@ export class InterviewService {
       });
       return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     } catch (e) {
-      console.error("TTS Error:", e);
       return undefined;
     }
   }
 
   async generateReport(history: string): Promise<Report> {
+    if (!history || history.trim().length < 10) {
+      throw new Error("Insufficient session data to generate an audit.");
+    }
+
     const ai = this.getAI();
-    // Using flash model for high speed evaluation as requested
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Audit this interview history for technical accuracy, scenario performance, and pronunciation. 
-      Return a STRICT JSON evaluation.
-      
-      HISTORY:
+      contents: `Perform an exhaustive professional evaluation based on this interview transcript. 
+      If the transcript is short, provide the best possible estimation of readiness.
+      Return a valid JSON object matching the required schema.
+
+      TRANSCRIPT:
       ${history}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
+          required: ["summary", "overallScore", "label", "metrics", "questionBreakdown"],
           properties: {
             summary: { type: Type.STRING },
             overallScore: { type: Type.NUMBER },
@@ -119,33 +120,6 @@ export class InterviewService {
                 fluency: { type: Type.NUMBER }
               }
             },
-            speechAnalysis: {
-              type: Type.OBJECT,
-              properties: {
-                clarityScore: { type: Type.NUMBER },
-                pace: { type: Type.STRING },
-                fillerWordUsage: { type: Type.STRING },
-                pronunciationGaps: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            },
-            behavioralAnalysis: {
-              type: Type.OBJECT,
-              properties: {
-                score: { type: Type.NUMBER },
-                eyeContact: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, percentage: { type: Type.STRING }, avg: { type: Type.STRING } } },
-                bodyLanguage: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, posture: { type: Type.STRING }, gestures: { type: Type.STRING } } },
-                facialExpression: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, engagement: { type: Type.STRING }, nervousness: { type: Type.STRING } } },
-                setupQuality: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, lighting: { type: Type.STRING } } },
-                energyLevel: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, consistency: { type: Type.STRING } } }
-              }
-            },
-            roadmap: {
-              type: Type.OBJECT,
-              properties: {
-                technical: { type: Type.ARRAY, items: { type: Type.STRING } },
-                communication: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            },
             questionBreakdown: {
               type: Type.ARRAY,
               items: {
@@ -155,9 +129,7 @@ export class InterviewService {
                   userAnswer: { type: Type.STRING },
                   idealAnswer: { type: Type.STRING },
                   difficulty: { type: Type.STRING },
-                  type: { type: Type.STRING },
                   correctness: { type: Type.NUMBER },
-                  duration: { type: Type.STRING },
                   tag: { type: Type.STRING },
                   feedback: {
                     type: Type.OBJECT,
@@ -165,9 +137,7 @@ export class InterviewService {
                       whatWentWell: { type: Type.ARRAY, items: { type: Type.STRING } },
                       areasToImprove: { type: Type.ARRAY, items: { type: Type.STRING } }
                     }
-                  },
-                  pronunciationFeedback: { type: Type.STRING },
-                  interviewerNotes: { type: Type.STRING }
+                  }
                 }
               }
             }
@@ -177,9 +147,10 @@ export class InterviewService {
     });
 
     try {
-      return JSON.parse(response.text || '{}');
+      const cleanText = response.text.replace(/```json|```/gi, '').trim();
+      return JSON.parse(cleanText);
     } catch (e) {
-      throw new Error("Evaluation parsing failed.");
+      throw new Error("Evaluation engine returned malformed data.");
     }
   }
 
