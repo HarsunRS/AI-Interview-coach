@@ -23,17 +23,19 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<InterviewHistoryItem[]>(currentUser?.history || []);
   const [report, setReport] = useState<Report | null>(null);
 
-  const syncUserData = (updatedProfile: UserProfile, updatedHistory: InterviewHistoryItem[]) => {
-    if (!currentUser) return;
-    const savedUsers: UserAccount[] = JSON.parse(localStorage.getItem('ip_users') || '[]');
-    const updatedUsers = savedUsers.map(u => u.email === currentUser.email ? { ...u, profile: updatedProfile, history: updatedHistory } : u);
-    const updatedSession = { ...currentUser, profile: updatedProfile, history: updatedHistory };
-    localStorage.setItem('ip_users', JSON.stringify(updatedUsers));
-    localStorage.setItem('ip_session', JSON.stringify(updatedSession));
-    setCurrentUser(updatedSession);
-    setProfile(updatedProfile);
-    setHistory(updatedHistory);
-  };
+  // Sync state to local storage whenever profile or history changes
+  useEffect(() => {
+    if (currentUser) {
+      const savedUsers: UserAccount[] = JSON.parse(localStorage.getItem('ip_users') || '[]');
+      const updatedUsers = savedUsers.map(u => 
+        u.email === currentUser.email ? { ...u, profile, history } : u
+      );
+      const updatedSession = { ...currentUser, profile, history };
+      
+      localStorage.setItem('ip_users', JSON.stringify(updatedUsers));
+      localStorage.setItem('ip_session', JSON.stringify(updatedSession));
+    }
+  }, [profile, history, currentUser]);
 
   const handleLogin = (user: UserAccount) => {
     setCurrentUser(user);
@@ -44,30 +46,26 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
     localStorage.removeItem('ip_session');
+    setCurrentUser(null);
     setView('auth');
   };
 
   const toggleTheme = () => {
-    // Explicitly typing newTheme and newProfile to fix theme literal type mismatch (string vs 'light' | 'dark')
     const newTheme: 'light' | 'dark' = profile.theme === 'light' ? 'dark' : 'light';
-    const newProfile: UserProfile = { ...profile, theme: newTheme };
-    if (currentUser) syncUserData(newProfile, history);
-    else setProfile(newProfile);
+    setProfile(prev => ({ ...prev, theme: newTheme }));
   };
 
   const handleStartSetup = () => setView('setup');
   
   const handleConfirmProfile = (selectedProfile: UserProfile) => {
-    syncUserData(selectedProfile, history);
+    setProfile(selectedProfile);
     setView('interview');
   };
 
   const handleCompleteInterview = async (transcript: string, logs: string[]) => {
     setView('loading');
     try {
-      // Include proctoring logs in the eval context
       const fullContext = `Proctoring Logs: ${logs.join(' | ')} \n\n Transcript: ${transcript}`;
       const result = await interviewService.generateReport(fullContext);
       
@@ -81,8 +79,7 @@ const App: React.FC = () => {
         report: result
       };
       
-      const updatedHistory = [newHistoryItem, ...history];
-      syncUserData(profile, updatedHistory);
+      setHistory(prev => [newHistoryItem, ...prev]);
       setReport(result);
       setView('report');
     } catch (error) {

@@ -41,7 +41,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
   
   const persona = PERSONAS.find(p => p.id === profile.interviewerPersonaId) || PERSONAS[0];
 
-  // Robust Speech Recognition Setup
+  // Initialize Speech Recognition
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -72,16 +72,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
       recognition.onend = () => {
         if (isListeningRef.current) {
           try { recognition.start(); } catch (e) {
-            console.error("Failed to restart recognition", e);
+            console.error("Auto-restart failed", e);
           }
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn("Speech Recognition Error:", event.error);
         if (event.error === 'not-allowed') {
-          // If explicitly blocked, we'll let them know but won't hard-lock the UI if they want to type
-          triggerLog("SPEECH ACCESS DENIED BY BROWSER", "med");
+          setStatus('permission_denied');
         }
       };
 
@@ -117,7 +115,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
       try { 
         recognitionRef.current?.start(); 
       } catch (e) {
-        console.warn("Recognition already active or failed to start", e);
+        // Recognition might already be running
       }
     }
   };
@@ -139,13 +137,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
         analyserRef.current.getByteFrequencyData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const level = Math.min(100, (sum / dataArray.length) * 3);
+        const level = Math.min(100, (sum / dataArray.length) * 4);
         setAudioLevel(level);
         animationFrameRef.current = requestAnimationFrame(update);
       };
       update();
     } catch (e) {
-      console.error("Visualizer setup failed:", e);
+      console.error("Visualizer failed", e);
     }
   };
 
@@ -180,12 +178,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       if (videoRef.current) videoRef.current.srcObject = stream;
       startAudioMonitoring(stream);
-      setStatus('initializing');
       return true;
     } catch (err) {
-      console.error("Hardware access failed:", err);
+      console.error("Hardware denied:", err);
       setStatus('permission_denied');
-      triggerLog("HARDWARE ACCESS BLOCKED", "high");
       return false;
     }
   };
@@ -195,8 +191,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
     initRef.current = true;
 
     const startSession = async () => {
-      // We attempt hardware, but don't hard-lock the AI initialization if it fails
-      // so users can still practice via text if they have no mic/cam.
       await requestHardware();
 
       setStatus('thinking');
@@ -219,10 +213,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
     return () => {
       interviewService.stopAudio();
       isListeningRef.current = false;
-      if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        try { recognitionRef.current.stop(); } catch(e) {}
-      }
+      if (recognitionRef.current) recognitionRef.current.stop();
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, [profile]);
@@ -262,11 +253,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   const getSubtitles = () => {
+    // Find last message from AI to display when idle
+    const lastModelMessage = [...messages].reverse().find(m => m.role === 'model')?.text;
+
     if (status === 'initializing') return `Establishing secure uplink with ${persona.name}...`;
-    if (status === 'thinking') return `Analyzing transmission...`;
+    if (status === 'thinking') return `Analyzing transmission buffer...`;
     if (status === 'speaking') return messages[messages.length - 1]?.text;
-    if (status === 'listening') return ((input + " " + interimTranscript).trim() || "Listening for voice input... Speak now.");
-    return "Bridge idle. Waiting for user response.";
+    if (status === 'listening') return ((input + " " + interimTranscript).trim() || "Ready. Waiting for your voice input...");
+    return lastModelMessage || "Neural link established. Waiting for initiation.";
   };
 
   if (status === 'permission_denied') {
@@ -275,14 +269,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
         <div className="w-20 h-20 bg-red-600/10 rounded-full flex items-center justify-center mb-10 border border-red-500/20 text-red-500 shadow-2xl animate-pulse">
            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 14 4-4"/><path d="m12 14-4-4"/><path d="M12 14V4"/><path d="M5 20h14"/></svg>
         </div>
-        <h2 className="text-2xl font-black mb-6 uppercase tracking-[0.4em]">Hardware Lock Detected</h2>
+        <h2 className="text-2xl font-black mb-6 uppercase tracking-[0.4em]">Bridge Link Failed</h2>
         <p className="text-slate-400 max-w-md font-medium leading-relaxed mb-12 text-sm">
-          The system prefers active microphone and camera streams. 
-          If you're having trouble with permissions, you can continue using text-only mode.
+          Simulation requires active microphone and camera streams. Please enable browser permissions to proceed.
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
-          <button onClick={() => window.location.reload()} className="bg-white text-black px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all shadow-xl">Try Again</button>
-          <button onClick={() => setStatus('idle')} className="bg-slate-800 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-700 transition-all shadow-xl border border-white/10">Skip to Text Mode</button>
+          <button onClick={() => window.location.reload()} className="bg-white text-black px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all shadow-xl">Retry Connection</button>
+          <button onClick={() => setStatus('idle')} className="bg-slate-800 text-white px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-700 transition-all shadow-xl border border-white/10">Continue Offline (Text Only)</button>
         </div>
       </div>
     );
@@ -308,7 +301,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
 
            <div className="bg-[#1e293b]/40 p-5 rounded-[2.5rem] border border-white/5">
               <div className="flex justify-between items-center mb-4 text-[8px] font-black uppercase tracking-widest text-white/30">
-                 <span>Voice Activity</span>
+                 <span>Voice Intensity</span>
                  <span className="text-blue-400 font-mono text-[10px]">{Math.round(audioLevel)}</span>
               </div>
               <div className="flex items-end gap-1.5 h-10 px-1">
@@ -317,7 +310,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
                       key={i} 
                       className="flex-1 rounded-full transition-all duration-75"
                       style={{ 
-                        height: `${Math.max(20, (audioLevel + Math.random() * 8) * 4)}%`,
+                        height: `${Math.max(15, (audioLevel + Math.random() * 8) * 4)}%`,
                         backgroundColor: audioLevel > 5 ? (i % 2 === 0 ? '#3b82f6' : '#60a5fa') : '#1e293b'
                       }}
                     ></div>
@@ -326,14 +319,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
            </div>
 
            <div className="flex-1 min-h-0 bg-black/20 p-5 rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden shadow-inner">
-              <h3 className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-4">Secure Audit Log</h3>
+              <h3 className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-4">Neural Audit Log</h3>
               <div className="flex-1 overflow-y-auto space-y-2 font-mono text-[7.5px] scrollbar-hide">
                  {proctorLogs.map((log, i) => (
                     <div key={i} className={`border-l-2 pl-2 py-0.5 leading-tight ${log.severity === 'high' ? 'border-red-500 text-red-400/70' : 'border-blue-500 text-blue-400/70'}`}>
                        [{log.time}] {log.msg}
                     </div>
                  ))}
-                 {proctorLogs.length === 0 && <div className="text-white/5 italic">Monitoring environment...</div>}
+                 {proctorLogs.length === 0 && <div className="text-white/5 italic">Monitoring uplink...</div>}
               </div>
            </div>
 
@@ -343,7 +336,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
            </div>
         </div>
 
-        {/* Neural Hub Center */}
+        {/* AI Feed Center */}
         <div className="flex-1 flex flex-col items-center justify-center p-8 relative">
            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.04),transparent_70%)] pointer-events-none"></div>
            
@@ -365,16 +358,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
               </div>
            </div>
 
-           {/* Reduced Font Interviewer Card */}
-           <div className="w-full max-w-xl bg-black/60 border border-white/5 p-10 rounded-[2.5rem] backdrop-blur-3xl text-center shadow-2xl relative z-20">
+           {/* AI Question Feed */}
+           <div className="w-full max-w-xl bg-black/60 border border-white/5 p-12 rounded-[3rem] backdrop-blur-3xl text-center shadow-2xl relative z-20">
               <span className="block text-[7px] font-black text-white/10 uppercase tracking-[0.6em] mb-4">Encrypted AI Feed</span>
-              <p className={`text-[10px] md:text-[11px] font-bold leading-relaxed tracking-tight min-h-[3.5rem] flex items-center justify-center transition-all duration-500 ${status === 'idle' ? 'text-white/20 italic' : 'text-white/90'}`}>
+              <p className={`text-[10px] md:text-[11px] font-bold leading-relaxed tracking-tight min-h-[4rem] flex items-center justify-center transition-all duration-500 ${status === 'idle' ? 'text-white/90' : 'text-white/60'}`}>
                  {getSubtitles()}
               </p>
            </div>
         </div>
 
-        {/* Candidate Visual Link */}
+        {/* Candidate Monitor */}
         <div className="absolute top-6 right-6 w-52 aspect-video bg-black rounded-[2rem] overflow-hidden border border-white/5 shadow-2xl z-20 group">
            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1] opacity-60 transition-opacity group-hover:opacity-80" />
            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
@@ -384,7 +377,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
            </div>
         </div>
 
-        {/* Sidebar History Drawer */}
+        {/* History Overlay */}
         <div className={`absolute top-0 right-0 bottom-0 z-40 bg-[#020617]/98 backdrop-blur-3xl border-l border-white/5 flex flex-col transition-all duration-500 ${showHistory ? 'w-80' : 'w-0 overflow-hidden'}`}>
            <div className="p-6 border-b border-white/5 flex items-center justify-between shrink-0">
               <h3 className="text-[9px] font-black text-white/30 uppercase tracking-[0.4em]">Audit Transcript</h3>
@@ -403,18 +396,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
         </div>
       </div>
 
-      {/* Neural Interface Footer */}
+      {/* Control Deck */}
       <div className="h-20 bg-black/90 border-t border-white/5 px-6 flex items-center gap-6 z-50 shrink-0">
          <button 
            onClick={toggleMic}
-           className={`h-11 px-8 rounded-xl flex items-center gap-4 transition-all active:scale-95 shadow-xl ${status === 'listening' ? 'bg-red-500 text-white shadow-red-500/10' : 'bg-blue-600 text-white shadow-blue-500/10'}`}
+           className={`h-11 px-8 rounded-xl flex items-center gap-4 transition-all active:scale-95 shadow-xl ${status === 'listening' ? 'bg-blue-600 text-white shadow-blue-500/20' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}
          >
             {status === 'listening' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="8" x="8" y="8" rx="1"/></svg>
-            ) : (
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
             )}
-            <span className="text-[8.5px] font-black uppercase tracking-widest">{status === 'listening' ? 'Cut Uplink' : 'Open Neural Link'}</span>
+            <span className="text-[8.5px] font-black uppercase tracking-widest">{status === 'listening' ? 'Mute Uplink' : 'Unmute Link'}</span>
          </button>
 
          <form onSubmit={handleSendResponse} className="flex-1 h-11 flex gap-3">
@@ -423,13 +416,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
               value={input}
               onChange={e => setInput(e.target.value)}
               disabled={status === 'thinking'}
-              placeholder={status === 'listening' ? "Voice buffer active..." : "Transmit data response..."}
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 text-[10px] font-bold outline-none focus:ring-4 focus:ring-blue-600/5 transition-all placeholder:text-white/5"
+              placeholder={status === 'listening' ? "Voice activity identified..." : "Transmit textual response..."}
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 text-[10px] font-bold outline-none focus:ring-4 focus:ring-blue-600/5 transition-all placeholder:text-white/10"
             />
             <button 
               type="submit" 
               disabled={!(input.trim() || interimTranscript.trim()) || status === 'thinking'}
-              className="h-11 w-11 bg-white text-black rounded-xl flex items-center justify-center transition-all hover:bg-slate-200 active:scale-95 disabled:opacity-5 shadow-2xl"
+              className="h-11 w-11 bg-white text-black rounded-xl flex items-center justify-center transition-all hover:bg-slate-200 active:scale-95 disabled:opacity-5"
             >
                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
             </button>
