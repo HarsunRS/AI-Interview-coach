@@ -30,21 +30,12 @@ const Layout: React.FC<LayoutProps> = ({ children, theme, toggleTheme }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
               )}
             </button>
-            <div className={`hidden md:flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-              Gemini AI Engine
-            </div>
           </div>
         </div>
       </header>
-      <main className="flex-1 w-full max-w-7xl mx-auto p-6 md:p-8">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8">
         {children}
       </main>
-      <footer className={`border-t py-8 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}>
-        <div className="max-w-7xl mx-auto px-6 text-center text-xs font-medium">
-          &copy; {new Date().getFullYear()} AI Interview Pro. Professional AI Mock Interviews.
-        </div>
-      </footer>
     </div>
   );
 };

@@ -158,7 +158,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
   };
 
   return (
-    <div className="flex flex-col h-[90vh] bg-[#0d1117] rounded-[3.5rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.4)] relative border border-white/5 animate-in zoom-in-95 duration-700">
+    <div className="flex flex-col h-[calc(100vh-140px)] min-h-[700px] bg-[#0d1117] rounded-[3.5rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.4)] relative border border-white/5 animate-in zoom-in-95 duration-700">
       {/* Violation Alert Layer */}
       {alert && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce">
@@ -225,19 +225,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
         <div className="flex-1 flex flex-col items-center justify-center p-12 relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.04),transparent_70%)]"></div>
           
-          <div className="relative w-96 h-96 flex items-center justify-center">
+          <div className="relative w-[30rem] h-[30rem] flex items-center justify-center">
             <div className={`absolute inset-0 rounded-full bg-blue-600/5 animate-ping duration-[3500ms] ${isSpeaking ? 'opacity-100' : 'opacity-0'}`}></div>
-            <div className={`w-48 h-48 rounded-full bg-[#161b22] border-4 border-[#30363d] flex items-center justify-center gap-4 shadow-2xl transition-all duration-500 ${isListening ? 'border-emerald-500/40 shadow-emerald-500/10' : ''}`}>
-               <span className={`w-3 h-3 bg-blue-400 rounded-full transition-all duration-300 ${isSpeaking ? 'scale-150 animate-bounce' : 'scale-100'}`}></span>
-               <span className={`w-3 h-3 bg-emerald-400 rounded-full transition-all duration-500 delay-75 ${isListening ? 'scale-150 animate-pulse shadow-xl shadow-emerald-400' : 'scale-100'}`}></span>
-               <span className={`w-3 h-3 bg-blue-400 rounded-full transition-all duration-300 delay-150 ${isSpeaking ? 'scale-150 animate-bounce' : 'scale-100'}`}></span>
+            <div className={`w-64 h-64 rounded-full bg-[#161b22] border-4 border-[#30363d] flex items-center justify-center gap-4 shadow-2xl transition-all duration-500 ${isListening ? 'border-emerald-500/40 shadow-emerald-500/10' : ''}`}>
+               <span className={`w-4 h-4 bg-blue-400 rounded-full transition-all duration-300 ${isSpeaking ? 'scale-150 animate-bounce' : 'scale-100'}`}></span>
+               <span className={`w-4 h-4 bg-emerald-400 rounded-full transition-all duration-500 delay-75 ${isListening ? 'scale-150 animate-pulse shadow-xl shadow-emerald-400' : 'scale-100'}`}></span>
+               <span className={`w-4 h-4 bg-blue-400 rounded-full transition-all duration-300 delay-150 ${isSpeaking ? 'scale-150 animate-bounce' : 'scale-100'}`}></span>
             </div>
           </div>
 
-          <div className="mt-20 w-full max-w-2xl text-center">
-             <div className="bg-[#161b22]/90 border border-white/5 px-12 py-10 rounded-[3.5rem] shadow-2xl backdrop-blur-3xl border-t-white/10">
+          <div className="mt-12 w-full max-w-4xl text-center">
+             <div className="bg-[#161b22]/90 border border-white/5 px-16 py-12 rounded-[4rem] shadow-2xl backdrop-blur-3xl border-t-white/10">
                <p className="text-white/20 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Transcript Subtitles</p>
-               <p className={`text-base leading-relaxed font-bold transition-all duration-500 ${isSpeaking || isListening ? 'text-white' : 'text-white/30'}`}>
+               <p className={`text-xl leading-relaxed font-bold transition-all duration-500 ${isSpeaking || isListening ? 'text-white' : 'text-white/30'}`}>
                  {isSpeaking ? (messages[messages.length-1]?.text || '...') : isListening ? (input || 'Listening to your response...') : 'Waiting for your next answer...'}
                </p>
              </div>
@@ -271,7 +271,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
         </div>
 
         {/* Floating User Preview */}
-        <div className="absolute top-36 right-16 w-80 aspect-video bg-[#161b22] rounded-[3rem] overflow-hidden border-2 border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.5)] z-20 hover:scale-105 transition-all duration-500">
+        <div className="absolute top-12 right-16 w-80 aspect-video bg-[#161b22] rounded-[3rem] overflow-hidden border-2 border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.5)] z-20 hover:scale-105 transition-all duration-500">
            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
            <div className="absolute bottom-6 left-6 flex items-center gap-3 bg-black/50 backdrop-blur-xl px-4 py-2 rounded-full border border-white/5">
               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_15px_#10b981]"></div>
@@ -300,13 +300,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, them
            <input 
              type="text" 
              autoFocus
-             className="flex-1 bg-black/60 border border-white/5 rounded-[2rem] px-10 py-7 text-white text-lg font-bold outline-none focus:ring-4 focus:ring-blue-600/10 transition-all shadow-inner placeholder:text-white/20"
+             className="flex-1 bg-black/60 border border-white/5 rounded-[2rem] px-12 py-8 text-white text-xl font-bold outline-none focus:ring-4 focus:ring-blue-600/10 transition-all shadow-inner placeholder:text-white/20"
              placeholder={isListening ? "Listening to your response..." : "Type or speak your answer..."}
              value={input}
              onChange={e => setInput(e.target.value)}
              disabled={loading || isFinishing}
            />
-           <button type="submit" disabled={!input.trim() || loading || isFinishing} className="bg-blue-600 text-white px-12 rounded-[2rem] hover:bg-blue-500 transition-all active:scale-95 shadow-[0_0_40px_rgba(37,99,235,0.4)] disabled:opacity-10 group">
+           <button type="submit" disabled={!input.trim() || loading || isFinishing} className="bg-blue-600 text-white px-14 rounded-[2rem] hover:bg-blue-500 transition-all active:scale-95 shadow-[0_0_40px_rgba(37,99,235,0.4)] disabled:opacity-10 group">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-1 transition-transform"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
            </button>
         </form>
