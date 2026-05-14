@@ -47,6 +47,8 @@ export interface UserProfile {
   rolePreference: 'Specific Role' | 'Overall Practice';
   interviewGoal: 'Check my preparation' | 'Prepare for a specific company' | 'Improve communication & confidence';
   targetCompany?: string;
+  resumeProfile?: ResumeProfile;
+  jobMatches?: JobMatch[];
 }
 
 export interface QuestionEvaluation {
@@ -144,6 +146,37 @@ export interface ImprovementPlan {
   weeklyPlan: WeeklyFocus[];
   practiceQuestions: PracticeQuestion[];
   quickWins: string[];
+}
+
+export interface ProjectDetail {
+  name: string;
+  description: string;
+  technologies: string[];
+  impact: string;
+}
+
+export interface EducationDetail {
+  degree: string;
+  institution: string;
+  year: string;
+  major: string;
+}
+
+export interface ResumeProfile {
+  yearsOfExperience: number;
+  seniorityLevel: string;
+  summary: string;
+  projects: ProjectDetail[];
+  education: EducationDetail[];
+  certifications: string[];
+}
+
+export interface JobMatch {
+  role: string;
+  matchScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  whyMatch: string;
 }
 
 export interface InterviewHistoryItem {

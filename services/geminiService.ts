@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Chat, Modality } from "@google/genai";
-import { UserProfile, Report, ResumeAnalysis } from "../types";
+import { UserProfile, Report, ResumeAnalysis, ResumeProfile, JobMatch } from "../types";
 import { PERSONAS } from "../constants";
 
 export class InterviewService {
@@ -199,70 +199,123 @@ export class InterviewService {
     };
   }
 
+  private evaluateAnswerLocally(answer: string): string {
+    const words = answer.trim().split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+
+    const techKeywords = [
+      'React', 'Angular', 'Vue', 'Node', 'Express', 'Python', 'Django', 'Flask',
+      'Java', 'Spring', 'SQL', 'PostgreSQL', 'MongoDB', 'Redis', 'Docker', 'AWS',
+      'TypeScript', 'JavaScript', 'GraphQL', 'Kubernetes', 'REST', 'API',
+      'microservices', 'TensorFlow', 'PyTorch', 'Machine Learning', 'CI/CD', 'Git'
+    ];
+    const techMentioned = techKeywords.filter(t => new RegExp(`\\b${t}\\b`, 'i').test(answer));
+    const hasNumbers = /\d+/.test(answer);
+    const hasStructure = /\b(first|then|finally|because|however|although|therefore|as a result|specifically|for example)\b/i.test(answer);
+    const fillerCount = (answer.match(/\b(um|uh|like|basically|you know|sort of|kind of|actually)\b/gi) || []).length;
+    const mentionedProject = /\b(project|built|developed|implemented|designed|created|worked on)\b/i.test(answer);
+
+    let score = 50;
+    if (wordCount > 100) score += 25;
+    else if (wordCount > 60) score += 15;
+    else if (wordCount > 30) score += 5;
+    else if (wordCount < 15) score -= 25;
+    if (hasNumbers) score += 10;
+    if (hasStructure) score += 10;
+    if (techMentioned.length > 0) score += 5;
+    score -= Math.min(15, fillerCount * 3);
+    score = Math.max(15, Math.min(95, score));
+
+    const quality = score >= 72 ? 'STRONG' : score >= 45 ? 'MODERATE' : 'WEAK';
+    const signals: string[] = [];
+    if (techMentioned.length > 0) signals.push(`Candidate mentioned ${techMentioned.slice(0, 3).join(', ')} — ask a specific follow-up about one of these technologies`);
+    if (mentionedProject) signals.push(`Candidate referenced a project — dig into the technical decisions or challenges`);
+
+    const directive = quality === 'STRONG'
+      ? 'ESCALATE: Ask a harder follow-up, introduce edge cases, or probe depth on what they mentioned.'
+      : quality === 'WEAK'
+      ? 'SIMPLIFY: Ask a clarifying question or reframe the topic at a lower difficulty level.'
+      : 'MAINTAIN: Follow up concretely on what they mentioned, ask for a real-world example.';
+
+    return `[ADAPTIVE SIGNAL | Quality: ${quality} (${score}/100) | ${signals.join(' | ')} | ${directive}]`;
+  }
+
   async initInterview(profile: UserProfile): Promise<{ text: string, audio?: string }> {
     this.profile = profile;
     this.fallbackQuestionIndex = 0;
     const persona = PERSONAS.find(p => p.id === profile.interviewerPersonaId) || PERSONAS[0];
-    const skills = profile.techStack.length ? profile.techStack.join(', ') : 'skills inferred from resume and job description';
-    
-    const systemInstruction = `
-      You are ${persona.name}, acting as a ${persona.role}. Your style is ${persona.style}.
-      
-      CRITICAL INTERVIEW FLOW:
-      1. Start warmly and ask for the candidate's self-introduction first. Do not begin with a hard technical question.
-      2. After the intro, ask about one resume/project detail.
-      3. Then ask skill-based technical questions using the candidate's extracted skills.
-      4. Then ask role-specific technical depth questions.
-      5. Then ask behavioral questions using STAR-style follow-ups.
-      6. Increase difficulty gradually only after the candidate answers well. Do not announce difficulty levels.
-      7. End every response with exactly ONE clear, direct question.
-      8. Keep responses concise, natural, and interview-like.
+    const skills = profile.techStack.length ? profile.techStack.join(', ') : 'skills inferred from resume';
 
-      SESSION CONTEXT:
-      - Goal: ${profile.interviewGoal}
-      - Technology Focus: ${skills}
-      - Seniority: ${profile.experienceLevel}
-      - Target Role: ${profile.role || 'General software role'}
-      - Target Company: ${profile.targetCompany || 'General Industry'}
-      - Resume Context: ${profile.resumeText || 'No resume provided'}
-      - Job Description: ${profile.jobDescription || 'No job description provided'}
-    `;
+    // Build structured resume context from parsed profile if available, else fall back to raw text
+    const rp = profile.resumeProfile;
+    const resumeContext = rp
+      ? `STRUCTURED CANDIDATE PROFILE:
+- Experience: ${rp.yearsOfExperience} year(s) (${rp.seniorityLevel})
+- Education: ${rp.education.map(e => `${e.degree} in ${e.major} — ${e.institution} (${e.year})`).join('; ') || 'Not provided'}
+- Certifications: ${rp.certifications.join(', ') || 'None mentioned'}
+- Key Projects (reference these by name in questions):
+${rp.projects.map(p => `  * ${p.name} [${p.technologies.join(', ')}]: ${p.impact}`).join('\n') || '  None extracted'}
+- Professional Summary: ${rp.summary}`
+      : `Resume text: ${profile.resumeText ? profile.resumeText.substring(0, 2000) : 'No resume provided'}`;
+
+    const systemInstruction = `You are ${persona.name}, a ${persona.role}. Your interviewing style: ${persona.style}.
+
+ADAPTIVE INTERVIEW PROTOCOL:
+Each candidate message will start with [ADAPTIVE SIGNAL]. You MUST use it:
+- STRONG answer → escalate difficulty, explore edge cases, ask for deeper technical reasoning
+- WEAK answer → simplify, reframe, ask a smaller clarifying question first
+- MODERATE answer → maintain difficulty, ask for a concrete example or specific outcome
+- If specific technologies are flagged → follow up on exactly those
+- If a project is flagged → ask about the technical challenge, a specific decision, or a tradeoff made
+Never announce difficulty levels. Never say "great answer" or "good job." Stay professional and concise.
+
+PERSONALIZED QUESTION STRATEGY:
+${resumeContext}
+When available, ask questions that reference the candidate's specific projects by name, their exact tech stack, and their education/certifications. This creates a personalised interview, not a generic one.
+
+INTERVIEW FLOW:
+1. Warm greeting → self-introduction
+2. Probe a specific named project from their resume (if available)
+3. Technical depth questions on their actual stack (${skills})
+4. Role-specific depth and system design (based on ${profile.role || profile.rolePreference})
+5. Behavioral round — STAR-style, tied to their actual work experience
+6. End every response with exactly ONE clear question. Keep responses concise.
+
+SESSION:
+- Goal: ${profile.interviewGoal}
+- Target Role: ${profile.role || 'General software role'}
+- Target Company: ${profile.targetCompany || 'General Industry'}
+- Seniority: ${profile.experienceLevel}
+- Job Description: ${profile.jobDescription ? profile.jobDescription.substring(0, 800) : 'Not provided'}`;
 
     try {
       const ai = this.getAI();
       this.chat = ai.chats.create({
         model: 'gemini-2.5-flash',
-        config: { 
-          systemInstruction, 
-          temperature: 0.8,
-        }
+        config: { systemInstruction, temperature: 0.8 }
       });
-
-      const response = await this.chat.sendMessage({ message: "SYSTEM_SIGNAL: Candidate has entered the room. Begin with a short greeting and ask for their self-introduction." });
+      const response = await this.chat.sendMessage({ message: 'SYSTEM_SIGNAL: Candidate has entered the room. Begin with a short warm greeting and ask for their self-introduction.' });
       const text = response.text || this.getFallbackQuestion();
       return { text };
-    } catch (e) {
+    } catch {
       this.chat = null;
-      const text = this.getFallbackQuestion();
-      return { text };
+      return { text: this.getFallbackQuestion() };
     }
   }
 
   async sendMessage(message: string): Promise<{ text: string, audio?: string }> {
-    const persona = PERSONAS.find(p => p.id === this.profile?.interviewerPersonaId) || PERSONAS[0];
     if (!this.chat) {
-      const text = this.getFallbackQuestion(message);
-      return { text };
+      return { text: this.getFallbackQuestion(message) };
     }
-
     try {
-      const response = await this.chat.sendMessage({ message });
+      const signal = this.evaluateAnswerLocally(message);
+      const adaptiveMessage = `${signal}\n\nCandidate answer: ${message}`;
+      const response = await this.chat.sendMessage({ message: adaptiveMessage });
       const text = response.text || this.getFallbackQuestion(message);
       return { text };
-    } catch (e) {
+    } catch {
       this.chat = null;
-      const text = this.getFallbackQuestion(message);
-      return { text };
+      return { text: this.getFallbackQuestion(message) };
     }
   }
 
@@ -430,6 +483,76 @@ export class InterviewService {
     } catch (e) {
       return this.buildFallbackReport(history);
     }
+  }
+
+  async parseResumeIntelligence(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {
+    const ai = this.getAI();
+    const jdPart = jobDescription?.trim() ? `\n\nJOB DESCRIPTION:\n${jobDescription.substring(0, 2000)}` : '';
+    const stackPart = techStack?.length ? `\n\nEXTRACTED SKILLS: ${techStack.join(', ')}` : '';
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Extract structured intelligence from this resume, then recommend the top 5 best-fit job roles based on the candidate's background. Be specific and accurate.${jdPart}${stackPart}\n\nRESUME:\n${resumeText.substring(0, 10000)}`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ['resumeProfile', 'jobMatches'],
+          properties: {
+            resumeProfile: {
+              type: Type.OBJECT,
+              required: ['yearsOfExperience', 'seniorityLevel', 'summary', 'projects', 'education', 'certifications'],
+              properties: {
+                yearsOfExperience: { type: Type.NUMBER },
+                seniorityLevel: { type: Type.STRING },
+                summary: { type: Type.STRING },
+                projects: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      technologies: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      impact: { type: Type.STRING }
+                    }
+                  }
+                },
+                education: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      degree: { type: Type.STRING },
+                      institution: { type: Type.STRING },
+                      year: { type: Type.STRING },
+                      major: { type: Type.STRING }
+                    }
+                  }
+                },
+                certifications: { type: Type.ARRAY, items: { type: Type.STRING } }
+              }
+            },
+            jobMatches: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  role: { type: Type.STRING },
+                  matchScore: { type: Type.NUMBER },
+                  matchedSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  missingSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  whyMatch: { type: Type.STRING }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const parsed = JSON.parse(response.text.replace(/```json|```/gi, '').trim());
+    return { resumeProfile: parsed.resumeProfile, jobMatches: parsed.jobMatches };
   }
 
   async analyzeResume(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<ResumeAnalysis> {

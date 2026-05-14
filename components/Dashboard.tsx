@@ -127,6 +127,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onStart, onViewReport, history, p
             </div>
           </div>
 
+          {profile.jobMatches && profile.jobMatches.length > 0 && (
+            <div className={`${panel} border rounded-2xl p-6 shadow-sm`}>
+              <h3 className={`text-lg font-black ${textPrimary}`}>Best-Fit Roles</h3>
+              <p className="text-xs text-slate-400 font-bold mt-1 mb-5">AI-matched from your resume.</p>
+              <div className="space-y-3">
+                {profile.jobMatches.slice(0, 4).map((match, i) => (
+                  <div key={i} className={`${softPanel} border rounded-xl p-3`}>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className={`text-xs font-black ${textPrimary}`}>{match.role}</p>
+                      <span className={`text-[10px] font-black ${match.matchScore >= 75 ? 'text-emerald-500' : match.matchScore >= 55 ? 'text-amber-500' : 'text-slate-400'}`}>{match.matchScore}%</span>
+                    </div>
+                    <div className="h-1 bg-slate-200/30 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${match.matchScore >= 75 ? 'bg-emerald-500' : match.matchScore >= 55 ? 'bg-amber-500' : 'bg-slate-400'}`} style={{ width: `${match.matchScore}%` }} />
+                    </div>
+                    {match.missingSkills.length > 0 && (
+                      <p className="text-[9px] text-slate-400 font-medium mt-1.5">Missing: {match.missingSkills.slice(0, 3).join(', ')}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className={`${panel} border rounded-2xl p-6 shadow-sm min-h-[280px]`}>
             <h3 className={`text-lg font-black ${textPrimary}`}>Score Trend</h3>
             <p className="text-xs text-slate-400 font-bold mb-5">Momentum across sessions.</p>

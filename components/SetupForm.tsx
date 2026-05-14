@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UserProfile, InterviewMode, RoundType, ResumeAnalysis } from '../types';
+import { UserProfile, InterviewMode, RoundType, ResumeAnalysis, ResumeProfile, JobMatch } from '../types';
 import { INITIAL_USER_PROFILE, COMMON_SKILLS, COMPANIES } from '../constants';
 import { interviewService } from '../services/geminiService';
 
@@ -24,6 +24,9 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysis | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null);
+  const [jobMatches, setJobMatches] = useState<JobMatch[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isDark = theme === 'dark';
@@ -129,11 +132,23 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
     try {
       const result = await interviewService.analyzeResume(resumeText, jobDescription, techStack);
       setResumeAnalysis(result);
-    } catch {
-      // silently fail — analysis is optional
-    } finally {
-      setIsAnalyzing(false);
-    }
+    } catch {}
+    finally { setIsAnalyzing(false); }
+  };
+
+  const runParseIntelligence = async (resumeText: string, jobDescription?: string, techStack?: string[]) => {
+    if (!resumeText.trim()) return;
+    setIsParsing(true);
+    setResumeProfile(null);
+    setJobMatches(null);
+    try {
+      const { resumeProfile: rp, jobMatches: jm } = await interviewService.parseResumeIntelligence(resumeText, jobDescription, techStack);
+      setResumeProfile(rp);
+      setJobMatches(jm);
+      // Store in profile so initInterview gets structured context
+      setProfile(prev => ({ ...prev, resumeProfile: rp, jobMatches: jm }));
+    } catch {}
+    finally { setIsParsing(false); }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,8 +160,9 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
       const text = await file.text();
       const resumeText = `[FILE: ${file.name}]\n${text.substring(0, 20000)}`;
       updateContext({ resumeText });
-      // auto-analyze on upload
+      // run both analyses in parallel
       runAnalysis(resumeText, profile.jobDescription, profile.techStack);
+      runParseIntelligence(resumeText, profile.jobDescription, profile.techStack);
     } catch {
       alert('Failed to read file. Try a text-based resume or paste the content into the job description box.');
     } finally {
@@ -265,11 +281,14 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
                     {isAnalyzing && <span className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block" />}
                   </div>
                   <button
-                    onClick={() => runAnalysis(profile.resumeText, profile.jobDescription, profile.techStack)}
-                    disabled={isAnalyzing}
+                    onClick={() => {
+                      runAnalysis(profile.resumeText, profile.jobDescription, profile.techStack);
+                      runParseIntelligence(profile.resumeText, profile.jobDescription, profile.techStack);
+                    }}
+                    disabled={isAnalyzing || isParsing}
                     className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-700 disabled:opacity-40 transition-colors"
                   >
-                    {isAnalyzing ? 'Analyzing...' : resumeAnalysis ? 'Re-analyze' : 'Analyze'}
+                    {(isAnalyzing || isParsing) ? 'Analyzing...' : resumeAnalysis ? 'Re-analyze' : 'Analyze'}
                   </button>
                 </div>
 
@@ -338,6 +357,102 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
                         ))}
                       </ul>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* ── Resume Intelligence (Projects + Education) ── */}
+            {(isParsing || resumeProfile) && (
+              <div className={`${mutedPanel} rounded-2xl border p-5`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Resume Intelligence</p>
+                  {isParsing && <span className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block" />}
+                </div>
+
+                {resumeProfile && (
+                  <div className="space-y-5 animate-in fade-in duration-500">
+                    {/* Summary row */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span className="text-[9px] font-black px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400">{resumeProfile.yearsOfExperience} yr{resumeProfile.yearsOfExperience !== 1 ? 's' : ''} experience</span>
+                      <span className="text-[9px] font-black px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">{resumeProfile.seniorityLevel}</span>
+                      {resumeProfile.certifications.map((c, i) => (
+                        <span key={i} className="text-[9px] font-black px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">{c}</span>
+                      ))}
+                    </div>
+
+                    {/* Projects */}
+                    {resumeProfile.projects.length > 0 && (
+                      <div>
+                        <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Extracted Projects</p>
+                        <div className="space-y-2">
+                          {resumeProfile.projects.slice(0, 4).map((p, i) => (
+                            <div key={i} className={`p-3 rounded-xl border ${isDark ? 'bg-slate-900/60 border-slate-700' : 'bg-white border-slate-200'}`}>
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <p className={`text-[11px] font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>{p.name}</p>
+                                <div className="flex flex-wrap gap-1 justify-end">
+                                  {p.technologies.slice(0, 3).map((t, j) => (
+                                    <span key={j} className="text-[8px] font-black px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded">{t}</span>
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-500 font-medium leading-snug">{p.impact}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Education */}
+                    {resumeProfile.education.length > 0 && (
+                      <div>
+                        <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-2">Education</p>
+                        <div className="space-y-1.5">
+                          {resumeProfile.education.map((e, i) => (
+                            <div key={i} className="flex items-center justify-between gap-2">
+                              <p className="text-[10px] text-slate-400 font-medium">{e.degree} in {e.major} — {e.institution}</p>
+                              <span className="text-[9px] text-slate-500 font-bold shrink-0">{e.year}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Job Role Matches ── */}
+            {(isParsing || jobMatches) && (
+              <div className={`${mutedPanel} rounded-2xl border p-5`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Best-Fit Job Roles</p>
+                  {isParsing && <span className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin inline-block" />}
+                </div>
+
+                {jobMatches && (
+                  <div className="space-y-3 animate-in fade-in duration-500">
+                    {jobMatches.slice(0, 5).map((match, i) => (
+                      <div key={i} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/60 border-slate-700' : 'bg-white border-slate-200'}`}>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <p className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>{match.role}</p>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="w-20 h-1.5 rounded-full overflow-hidden bg-slate-200/20">
+                              <div className={`h-full rounded-full ${match.matchScore >= 75 ? 'bg-emerald-400' : match.matchScore >= 55 ? 'bg-amber-400' : 'bg-slate-400'}`} style={{ width: `${match.matchScore}%` }} />
+                            </div>
+                            <span className={`text-[10px] font-black ${match.matchScore >= 75 ? 'text-emerald-400' : match.matchScore >= 55 ? 'text-amber-400' : 'text-slate-400'}`}>{match.matchScore}%</span>
+                          </div>
+                        </div>
+                        <p className="text-[9px] text-slate-500 font-medium mb-2 leading-snug">{match.whyMatch}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {match.matchedSkills.slice(0, 4).map((s, j) => (
+                            <span key={j} className="text-[8px] font-black px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg">✓ {s}</span>
+                          ))}
+                          {match.missingSkills.slice(0, 2).map((s, j) => (
+                            <span key={j} className="text-[8px] font-black px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg">✗ {s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
