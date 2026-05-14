@@ -4,6 +4,7 @@ import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip, YAxis } from 'recha
 
 interface DashboardProps {
   onStart: () => void;
+  onAnalyzeResume: () => void;
   onViewReport: (report: any) => void;
   history: InterviewHistoryItem[];
   profile: UserProfile;
@@ -16,7 +17,7 @@ const Icon: React.FC<{ path: React.ReactNode; className?: string }> = ({ path, c
   </svg>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ onStart, onViewReport, history, profile, theme }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onStart, onAnalyzeResume, onViewReport, history, profile, theme }) => {
   const chartData = history.slice().reverse().map(h => ({ name: h.date.split(',')[0], score: h.score }));
   const averageScore = history.length ? Math.round(history.reduce((a, b) => a + b.score, 0) / history.length) : 0;
   const bestScore = history.length ? Math.max(...history.map(h => h.score)) : 0;
@@ -51,9 +52,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onStart, onViewReport, history, p
               <p className={`${textSecondary} text-sm font-medium mt-1`}>Practice follows your resume, projects, extracted skills, technical depth, then behavioral questions.</p>
             </div>
           </div>
-          <button onClick={onStart} className="bg-blue-600 text-white px-7 py-4 rounded-xl font-black shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all text-xs uppercase tracking-widest">
-            Start New Practice
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={onAnalyzeResume} className="border border-blue-600 text-blue-600 px-6 py-4 rounded-xl font-black hover:bg-blue-600/10 active:scale-95 transition-all text-xs uppercase tracking-widest">
+              Analyze Resume
+            </button>
+            <button onClick={onStart} className="bg-blue-600 text-white px-7 py-4 rounded-xl font-black shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all text-xs uppercase tracking-widest">
+              Start New Practice
+            </button>
+          </div>
         </div>
       </section>
 

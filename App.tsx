@@ -6,11 +6,12 @@ import Dashboard from './components/Dashboard';
 import SetupForm from './components/SetupForm';
 import ChatInterface from './components/ChatInterface';
 import ReportView from './components/ReportView';
+import ResumeAnalyzer from './components/ResumeAnalyzer';
 import { UserProfile, Report, InterviewHistoryItem, UserAccount } from './types';
 import { interviewService } from './services/geminiService';
 import { INITIAL_USER_PROFILE } from './constants';
 
-type View = 'auth' | 'dashboard' | 'setup' | 'interview' | 'report' | 'loading' | 'error';
+type View = 'auth' | 'dashboard' | 'setup' | 'interview' | 'report' | 'loading' | 'error' | 'resume-analyzer';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
@@ -77,8 +78,9 @@ const App: React.FC = () => {
     <Layout theme={profile.theme} toggleTheme={() => setProfile(p => ({...p, theme: p.theme === 'light' ? 'dark' : 'light'}))}>
       {view === 'auth' && <Auth onLogin={handleLogin} theme={profile.theme} />}
       {view === 'dashboard' && currentUser && (
-        <Dashboard profile={profile} history={history} onStart={() => setView('setup')} onViewReport={(rep) => { setReport(rep); setView('report'); }} theme={profile.theme} />
+        <Dashboard profile={profile} history={history} onStart={() => setView('setup')} onAnalyzeResume={() => setView('resume-analyzer')} onViewReport={(rep) => { setReport(rep); setView('report'); }} theme={profile.theme} />
       )}
+      {view === 'resume-analyzer' && <ResumeAnalyzer onBack={() => setView('dashboard')} theme={profile.theme} />}
       {view === 'setup' && <SetupForm onStart={(p) => { setProfile(p); setView('interview'); }} onCancel={() => setView('dashboard')} theme={profile.theme} />}
       {view === 'interview' && <ChatInterface profile={profile} onComplete={handleCompleteInterview} onCancel={() => setView('dashboard')} theme={profile.theme} />}
       {view === 'loading' && (
