@@ -9,6 +9,9 @@ export class InterviewService {
   private audioContext: AudioContext | null = null;
   private currentAudioSource: AudioBufferSourceNode | null = null;
   private fallbackQuestionIndex = 0;
+  private ollamaMessages: Array<{role: string, content: string}> = [];
+  private ollamaModel: string | null = null;
+  private ollamaChecked = false;
 
   private getAI() {
     return new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -19,6 +22,56 @@ export class InterviewService {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     }
     return this.audioContext;
+  }
+
+  // ── Ollama local-model fallback ──────────────────────────────────────────
+
+  private async getOllamaModel(): Promise<string | null> {
+    if (this.ollamaChecked) return this.ollamaModel;
+    this.ollamaChecked = true;
+    try {
+      const res = await fetch('http://localhost:11434/api/tags', {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const names: string[] = (data.models ?? []).map((m: any) => m.name as string);
+      const preferred = ['qwen2.5', 'qwen2.5-coder', 'llama3.2', 'llama3.1', 'mistral', 'gemma2', 'phi4', 'deepseek-r1'];
+      this.ollamaModel =
+        preferred.find(p => names.some(n => n.startsWith(p))) ??
+        names.find(n => !n.includes('embed')) ??
+        null;
+      return this.ollamaModel;
+    } catch {
+      return null;
+    }
+  }
+
+  private async ollamaChat(
+    messages: Array<{role: string, content: string}>,
+    json = false,
+  ): Promise<string> {
+    const model = await this.getOllamaModel();
+    if (!model) throw new Error('Ollama not available');
+    const body: Record<string, unknown> = { model, messages, stream: false };
+    if (json) body.format = 'json';
+    const res = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(180_000),
+    });
+    if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
+    const data = await res.json();
+    return data.message?.content ?? '';
+  }
+
+  private parseOllamaJson(raw: string): any {
+    const cleaned = raw.replace(/```json|```/gi, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('No JSON object found in Ollama response');
+    return JSON.parse(cleaned.slice(start, end + 1));
   }
 
   private getFallbackQuestion(answer?: string) {
@@ -299,24 +352,49 @@ SESSION:
       return { text };
     } catch {
       this.chat = null;
+      // Gemini failed — try Ollama before falling back to scripted questions
+      try {
+        const model = await this.getOllamaModel();
+        if (model) {
+          this.ollamaMessages = [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: 'SYSTEM_SIGNAL: Candidate has entered the room. Begin with a short warm greeting and ask for their self-introduction.' },
+          ];
+          const reply = await this.ollamaChat(this.ollamaMessages);
+          this.ollamaMessages.push({ role: 'assistant', content: reply });
+          return { text: reply || this.getFallbackQuestion() };
+        }
+      } catch {}
       return { text: this.getFallbackQuestion() };
     }
   }
 
   async sendMessage(message: string): Promise<{ text: string, audio?: string }> {
-    if (!this.chat) {
-      return { text: this.getFallbackQuestion(message) };
+    const signal = this.evaluateAnswerLocally(message);
+    const adaptiveMessage = `${signal}\n\nCandidate answer: ${message}`;
+
+    // Primary: Gemini chat
+    if (this.chat) {
+      try {
+        const response = await this.chat.sendMessage({ message: adaptiveMessage });
+        const text = response.text || this.getFallbackQuestion(message);
+        return { text };
+      } catch {
+        this.chat = null;
+      }
     }
-    try {
-      const signal = this.evaluateAnswerLocally(message);
-      const adaptiveMessage = `${signal}\n\nCandidate answer: ${message}`;
-      const response = await this.chat.sendMessage({ message: adaptiveMessage });
-      const text = response.text || this.getFallbackQuestion(message);
-      return { text };
-    } catch {
-      this.chat = null;
-      return { text: this.getFallbackQuestion(message) };
+
+    // Fallback: Ollama (keep the full conversation history)
+    if (this.ollamaMessages.length > 0) {
+      try {
+        this.ollamaMessages.push({ role: 'user', content: adaptiveMessage });
+        const reply = await this.ollamaChat(this.ollamaMessages);
+        this.ollamaMessages.push({ role: 'assistant', content: reply });
+        return { text: reply || this.getFallbackQuestion(message) };
+      } catch {}
     }
+
+    return { text: this.getFallbackQuestion(message) };
   }
 
   async generateSpeech(text: string, voice: string): Promise<string | undefined> {
@@ -480,12 +558,90 @@ SESSION:
         improvementPlan: parsed.improvementPlan || undefined,
         ...parsed
       };
-    } catch (e) {
-      return this.buildFallbackReport(history);
+    } catch {
+      try {
+        return await this.generateReportWithOllama(history);
+      } catch {
+        return this.buildFallbackReport(history);
+      }
     }
   }
 
+  private async generateReportWithOllama(history: string): Promise<Report> {
+    const prompt = `You are an expert interview evaluator. Analyze the transcript below and return ONLY a valid JSON object — no other text.
+
+JSON structure:
+{
+  "summary": "<overall 2-sentence summary>",
+  "overallScore": <0-100>,
+  "label": "<Beginner|Intermediate|Interview Ready|Strong>",
+  "duration": "Practice session",
+  "metrics": {
+    "technicalAccuracy": <0-100>, "communication": <0-100>,
+    "problemSolving": <0-100>, "confidence": <0-100>,
+    "pronunciation": <0-100>, "fluency": <0-100>
+  },
+  "speechAnalysis": {
+    "clarityScore": <0-100>,
+    "pace": "<Too Fast|Too Slow|Optimal>",
+    "fillerWordUsage": "<High|Moderate|Low>",
+    "pronunciationGaps": []
+  },
+  "roadmap": {
+    "technical": ["<tip1>", "<tip2>"],
+    "communication": ["<tip1>", "<tip2>"]
+  },
+  "questionBreakdown": [
+    {
+      "questionText": "...", "userAnswer": "...", "idealAnswer": "...",
+      "type": "Technical", "difficulty": "<Easy|Medium|Hard>",
+      "correctness": <0-100>, "duration": "N/A",
+      "tag": "<Excellent|Partial|Weak>",
+      "feedback": { "whatWentWell": ["..."], "areasToImprove": ["..."] },
+      "interviewerNotes": "..."
+    }
+  ]
+}
+
+TRANSCRIPT:
+${history.substring(0, 12000)}`;
+
+    const raw = await this.ollamaChat([{ role: 'user', content: prompt }], true);
+    const parsed = this.parseOllamaJson(raw);
+    return {
+      duration: 'Practice session',
+      behavioralAnalysis: {
+        score: parsed.metrics?.communication ?? 70,
+        eyeContact: { score: 70, percentage: 'N/A', avg: 'N/A' },
+        bodyLanguage: { score: 70, posture: 'Not measured', gestures: 'Not measured' },
+        facialExpression: { score: 70, engagement: 'Not measured', nervousness: 'Not measured' },
+        setupQuality: { score: 70, lighting: 'Not measured' },
+        energyLevel: { score: 70, consistency: 'Not measured' },
+      },
+      speechAnalysis: {
+        clarityScore: parsed.speechAnalysis?.clarityScore ?? parsed.metrics?.fluency ?? 70,
+        pace: parsed.speechAnalysis?.pace ?? 'Optimal',
+        fillerWordUsage: parsed.speechAnalysis?.fillerWordUsage ?? 'Moderate',
+        pronunciationGaps: parsed.speechAnalysis?.pronunciationGaps ?? [],
+      },
+      roadmap: {
+        technical: parsed.roadmap?.technical ?? ['Review your weakest answers and add concrete examples.'],
+        communication: parsed.roadmap?.communication ?? ['Use clear setup-action-result structure.'],
+      },
+      improvementPlan: parsed.improvementPlan,
+      ...parsed,
+    };
+  }
+
   async parseResumeIntelligence(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {
+    try {
+      return await this.parseResumeIntelligenceGemini(resumeText, jobDescription, techStack);
+    } catch {
+      return this.parseResumeIntelligenceOllama(resumeText, jobDescription);
+    }
+  }
+
+  private async parseResumeIntelligenceGemini(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {
     const ai = this.getAI();
     const jdPart = jobDescription?.trim() ? `\n\nJOB DESCRIPTION:\n${jobDescription.substring(0, 2000)}` : '';
     const stackPart = techStack?.length ? `\n\nEXTRACTED SKILLS: ${techStack.join(', ')}` : '';
@@ -570,7 +726,55 @@ SESSION:
     return { resumeProfile: rp, jobMatches: jm };
   }
 
+  private async parseResumeIntelligenceOllama(resumeText: string, jobDescription?: string): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {
+    const jdPart = jobDescription?.trim() ? `\n\nJOB DESCRIPTION:\n${jobDescription.substring(0, 2000)}` : '';
+    const prompt = `Extract information from this resume and suggest the top 5 best-fit job roles. Return ONLY a valid JSON object — no other text.
+
+{
+  "resumeProfile": {
+    "yearsOfExperience": <number>,
+    "seniorityLevel": "<Junior|Mid-level|Senior|Lead>",
+    "summary": "<2-3 sentence professional summary>",
+    "projects": [{"name":"","description":"","technologies":[],"impact":""}],
+    "education": [{"degree":"","institution":"","year":"","major":""}],
+    "certifications": []
+  },
+  "jobMatches": [
+    {"role":"","matchScore":<0-100>,"matchedSkills":[],"missingSkills":[],"whyMatch":""}
+  ]
+}
+
+RESUME:\n${resumeText.substring(0, 10000)}${jdPart}`;
+
+    const raw = await this.ollamaChat([{ role: 'user', content: prompt }], true);
+    const parsed = this.parseOllamaJson(raw);
+    const rp: ResumeProfile = {
+      yearsOfExperience: parsed.resumeProfile?.yearsOfExperience ?? 0,
+      seniorityLevel: parsed.resumeProfile?.seniorityLevel ?? 'Unknown',
+      summary: parsed.resumeProfile?.summary ?? '',
+      projects: parsed.resumeProfile?.projects ?? [],
+      education: parsed.resumeProfile?.education ?? [],
+      certifications: parsed.resumeProfile?.certifications ?? [],
+    };
+    const jm: JobMatch[] = (parsed.jobMatches ?? []).map((m: any) => ({
+      role: m.role ?? 'Unknown Role',
+      matchScore: m.matchScore ?? 0,
+      matchedSkills: m.matchedSkills ?? [],
+      missingSkills: m.missingSkills ?? [],
+      whyMatch: m.whyMatch ?? '',
+    }));
+    return { resumeProfile: rp, jobMatches: jm };
+  }
+
   async analyzeResume(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<ResumeAnalysis> {
+    try {
+      return await this.analyzeResumeGemini(resumeText, jobDescription, techStack);
+    } catch {
+      return this.analyzeResumeOllama(resumeText, jobDescription);
+    }
+  }
+
+  private async analyzeResumeGemini(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<ResumeAnalysis> {
     const ai = this.getAI();
     const jdPart = jobDescription?.trim() ? `\n\nJOB DESCRIPTION:\n${jobDescription.substring(0, 3000)}` : '';
     const stackPart = techStack?.length ? `\n\nEXTRACTED SKILLS: ${techStack.join(', ')}` : '';
@@ -608,6 +812,37 @@ SESSION:
       improvementTips: parsed.improvementTips ?? [],
       keyHighlights: parsed.keyHighlights ?? [],
     } as ResumeAnalysis;
+  }
+
+  private async analyzeResumeOllama(resumeText: string, jobDescription?: string): Promise<ResumeAnalysis> {
+    const jdPart = jobDescription?.trim() ? `\n\nJOB DESCRIPTION:\n${jobDescription.substring(0, 3000)}` : '';
+    const prompt = `You are an expert resume reviewer. Analyze this resume for interview readiness and ATS compatibility. Return ONLY a valid JSON object — no other text.
+
+{
+  "overallScore": <0-100>,
+  "atsScore": <0-100 for ATS keyword match>,
+  "label": "<Excellent|Good|Fair|Needs Work>",
+  "strengths": ["<strength1>","<strength2>","<strength3>"],
+  "weaknesses": ["<weakness1>","<weakness2>","<weakness3>"],
+  "skillGaps": ["<missing skill>"],
+  "improvementTips": ["<actionable tip1>","<tip2>","<tip3>","<tip4>","<tip5>"],
+  "keyHighlights": ["<achievement1>","<achievement2>"]
+}
+
+RESUME:\n${resumeText.substring(0, 8000)}${jdPart}`;
+
+    const raw = await this.ollamaChat([{ role: 'user', content: prompt }], true);
+    const parsed = this.parseOllamaJson(raw);
+    return {
+      overallScore: parsed.overallScore ?? 0,
+      atsScore: parsed.atsScore ?? 0,
+      label: parsed.label ?? 'Unrated',
+      strengths: parsed.strengths ?? [],
+      weaknesses: parsed.weaknesses ?? [],
+      skillGaps: parsed.skillGaps ?? [],
+      improvementTips: parsed.improvementTips ?? [],
+      keyHighlights: parsed.keyHighlights ?? [],
+    };
   }
 
   async playAudio(base64: string) {
