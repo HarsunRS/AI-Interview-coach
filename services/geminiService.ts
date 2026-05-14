@@ -552,7 +552,22 @@ SESSION:
     });
 
     const parsed = JSON.parse(response.text.replace(/```json|```/gi, '').trim());
-    return { resumeProfile: parsed.resumeProfile, jobMatches: parsed.jobMatches };
+    const rp: ResumeProfile = {
+      yearsOfExperience: parsed.resumeProfile?.yearsOfExperience ?? 0,
+      seniorityLevel: parsed.resumeProfile?.seniorityLevel ?? 'Unknown',
+      summary: parsed.resumeProfile?.summary ?? '',
+      projects: parsed.resumeProfile?.projects ?? [],
+      education: parsed.resumeProfile?.education ?? [],
+      certifications: parsed.resumeProfile?.certifications ?? [],
+    };
+    const jm: JobMatch[] = (parsed.jobMatches ?? []).map((m: any) => ({
+      role: m.role ?? 'Unknown Role',
+      matchScore: m.matchScore ?? 0,
+      matchedSkills: m.matchedSkills ?? [],
+      missingSkills: m.missingSkills ?? [],
+      whyMatch: m.whyMatch ?? '',
+    }));
+    return { resumeProfile: rp, jobMatches: jm };
   }
 
   async analyzeResume(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<ResumeAnalysis> {
@@ -583,7 +598,16 @@ SESSION:
     });
 
     const parsed = JSON.parse(response.text.replace(/```json|```/gi, '').trim());
-    return parsed as ResumeAnalysis;
+    return {
+      overallScore: parsed.overallScore ?? 0,
+      atsScore: parsed.atsScore ?? 0,
+      label: parsed.label ?? 'Unrated',
+      strengths: parsed.strengths ?? [],
+      weaknesses: parsed.weaknesses ?? [],
+      skillGaps: parsed.skillGaps ?? [],
+      improvementTips: parsed.improvementTips ?? [],
+      keyHighlights: parsed.keyHighlights ?? [],
+    } as ResumeAnalysis;
   }
 
   async playAudio(base64: string) {

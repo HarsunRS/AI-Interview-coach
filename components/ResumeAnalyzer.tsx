@@ -7,6 +7,37 @@ interface ResumeAnalyzerProps {
   theme: 'light' | 'dark';
 }
 
+interface ScoreRingProps {
+  score: number;
+  label: string;
+  color: string;
+  isDark: boolean;
+  textPrimary: string;
+  textMuted: string;
+}
+
+const ScoreRing: React.FC<ScoreRingProps> = ({ score, label, color, isDark, textPrimary, textMuted }) => {
+  const r = 54;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (circ * (score || 0)) / 100;
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative w-32 h-32 flex items-center justify-center">
+        <svg width="128" height="128" className="-rotate-90 absolute inset-0">
+          <circle cx="64" cy="64" r={r} stroke={isDark ? '#1e293b' : '#f1f5f9'} strokeWidth="10" fill="none" />
+          <circle cx="64" cy="64" r={r} stroke={color} strokeWidth="10" fill="none"
+            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
+        </svg>
+        <div className="flex flex-col items-center z-10">
+          <span className={`text-3xl font-black ${textPrimary}`} style={{ lineHeight: 1 }}>{score ?? '--'}</span>
+          <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">/ 100</span>
+        </div>
+      </div>
+      <p className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>{label}</p>
+    </div>
+  );
+};
+
 const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
   const [resumeText, setResumeText] = useState('');
   const [fileName, setFileName] = useState('');
@@ -17,6 +48,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
   const [profile, setProfile] = useState<ResumeProfile | null>(null);
   const [jobMatches, setJobMatches] = useState<JobMatch[] | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isDark = theme === 'dark';
@@ -37,6 +69,10 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
       const text = await file.text();
       setResumeText(`[FILE: ${file.name}]\n${text.substring(0, 20000)}`);
       setFileName(file.name);
+      setAnalysis(null);
+      setProfile(null);
+      setJobMatches(null);
+      setError(null);
     } catch {
       alert('Could not read the file. Try a plain-text or PDF resume.');
     }
@@ -49,7 +85,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
     setProfile(null);
     setJobMatches(null);
     setExpandedMatch(null);
-
+    setError(null);
     setIsAnalyzing(true);
     setIsParsing(true);
 
@@ -58,34 +94,18 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
       interviewService.parseResumeIntelligence(resumeText, jobDescription),
     ]);
 
-    if (atsResult.status === 'fulfilled') setAnalysis(atsResult.value);
+    if (atsResult.status === 'fulfilled') {
+      setAnalysis(atsResult.value);
+    } else {
+      setError('Resume score analysis failed. Check your API key or try again.');
+    }
     setIsAnalyzing(false);
 
     if (intelligenceResult.status === 'fulfilled') {
-      setProfile(intelligenceResult.value.resumeProfile);
-      setJobMatches(intelligenceResult.value.jobMatches);
+      setProfile(intelligenceResult.value.resumeProfile ?? null);
+      setJobMatches(intelligenceResult.value.jobMatches ?? null);
     }
     setIsParsing(false);
-  };
-
-  const ScoreRing = ({ score, label, color }: { score: number; label: string; color: string }) => {
-    const r = 54;
-    const circ = 2 * Math.PI * r;
-    const offset = circ - (circ * score) / 100;
-    return (
-      <div className="flex flex-col items-center gap-2">
-        <svg width="128" height="128" className="-rotate-90">
-          <circle cx="64" cy="64" r={r} stroke={isDark ? '#1e293b' : '#f1f5f9'} strokeWidth="10" fill="none" />
-          <circle cx="64" cy="64" r={r} stroke={color} strokeWidth="10" fill="none"
-            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
-        </svg>
-        <div className="absolute flex flex-col items-center" style={{ marginTop: -8 }}>
-          <span className={`text-3xl font-black ${textPrimary}`} style={{ lineHeight: 1 }}>{score}</span>
-          <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">/ 100</span>
-        </div>
-        <p className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>{label}</p>
-      </div>
-    );
   };
 
   return (
@@ -144,18 +164,17 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                 )}
               </button>
 
-              {/* Or paste */}
-              {!resumeText && (
-                <div className="mt-4">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Or paste resume text</p>
-                  <textarea
-                    rows={6}
-                    className={`w-full p-4 rounded-xl border text-xs font-medium leading-relaxed resize-none outline-none focus:ring-2 focus:ring-blue-600/20 transition-all ${inputCls}`}
-                    placeholder="Paste your resume content here..."
-                    onChange={e => { setResumeText(e.target.value); setFileName(''); }}
-                  />
-                </div>
-              )}
+              {/* Paste fallback */}
+              <div className="mt-4">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Or paste resume text</p>
+                <textarea
+                  rows={6}
+                  value={fileName ? '' : resumeText}
+                  className={`w-full p-4 rounded-xl border text-xs font-medium leading-relaxed resize-none outline-none focus:ring-2 focus:ring-blue-600/20 transition-all ${inputCls}`}
+                  placeholder="Paste your resume content here..."
+                  onChange={e => { setResumeText(e.target.value); setFileName(''); setAnalysis(null); setProfile(null); setJobMatches(null); }}
+                />
+              </div>
             </div>
 
             {/* Job Description */}
@@ -180,13 +199,19 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
           {/* ── Right: Results panel ── */}
           <div className="lg:col-span-3 space-y-5">
 
-            {!hasResults && !running && (
+            {!hasResults && !running && !error && (
               <div className={`${card} border rounded-2xl p-16 flex flex-col items-center justify-center text-center gap-4`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                 </svg>
                 <p className="text-sm font-black text-slate-500">Upload your resume and click Analyze to get started</p>
                 <p className="text-[10px] text-slate-600 font-bold">ATS score · Skill gaps · Project extraction · Job role matches</p>
+              </div>
+            )}
+
+            {error && (
+              <div className={`border rounded-2xl p-6 ${isDark ? 'bg-red-950/30 border-red-800/40' : 'bg-red-50 border-red-200'}`}>
+                <p className={`text-xs font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>{error}</p>
               </div>
             )}
 
@@ -203,18 +228,14 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                   <div className="space-y-6 animate-in fade-in duration-500">
                     {/* Score rings */}
                     <div className="flex items-center justify-around gap-4">
-                      <div className="relative flex flex-col items-center">
-                        <ScoreRing score={analysis.overallScore} label="Resume Score" color="#3b82f6" />
-                      </div>
-                      <div className="relative flex flex-col items-center">
-                        <ScoreRing score={analysis.atsScore} label="ATS Score" color="#10b981" />
-                      </div>
+                      <ScoreRing score={analysis.overallScore} label="Resume Score" color="#3b82f6" isDark={isDark} textPrimary={textPrimary} textMuted={textMuted} />
+                      <ScoreRing score={analysis.atsScore} label="ATS Score" color="#10b981" isDark={isDark} textPrimary={textPrimary} textMuted={textMuted} />
                       <div className="flex flex-col items-center gap-2">
                         <span className={`text-lg font-black px-4 py-2 rounded-2xl border ${
-                          analysis.overallScore >= 80 ? (isDark ? 'bg-emerald-900/40 border-emerald-700 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700')
-                          : analysis.overallScore >= 60 ? (isDark ? 'bg-amber-900/40 border-amber-700 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700')
+                          (analysis.overallScore ?? 0) >= 80 ? (isDark ? 'bg-emerald-900/40 border-emerald-700 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700')
+                          : (analysis.overallScore ?? 0) >= 60 ? (isDark ? 'bg-amber-900/40 border-amber-700 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700')
                           : (isDark ? 'bg-red-900/40 border-red-700 text-red-400' : 'bg-red-50 border-red-200 text-red-700')
-                        }`}>{analysis.label}</span>
+                        }`}>{analysis.label || 'N/A'}</span>
                         <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest text-center">Readiness Label</p>
                       </div>
                     </div>
@@ -224,7 +245,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                       <div className={`p-4 rounded-xl border ${isDark ? 'bg-emerald-950/30 border-emerald-800/40' : 'bg-emerald-50 border-emerald-100'}`}>
                         <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-3">Strengths</p>
                         <ul className="space-y-1.5">
-                          {analysis.strengths.map((s, i) => (
+                          {(analysis.strengths ?? []).map((s, i) => (
                             <li key={i} className={`text-[10px] font-medium leading-snug ${isDark ? 'text-emerald-100' : 'text-emerald-800'}`}>✓ {s}</li>
                           ))}
                         </ul>
@@ -232,7 +253,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                       <div className={`p-4 rounded-xl border ${isDark ? 'bg-amber-950/30 border-amber-800/40' : 'bg-amber-50 border-amber-100'}`}>
                         <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-3">To Improve</p>
                         <ul className="space-y-1.5">
-                          {analysis.weaknesses.map((w, i) => (
+                          {(analysis.weaknesses ?? []).map((w, i) => (
                             <li key={i} className={`text-[10px] font-medium leading-snug ${isDark ? 'text-amber-100' : 'text-amber-800'}`}>△ {w}</li>
                           ))}
                         </ul>
@@ -240,13 +261,13 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                     </div>
 
                     {/* Skill Gaps */}
-                    {analysis.skillGaps.length > 0 && (
+                    {(analysis.skillGaps ?? []).length > 0 && (
                       <div>
                         <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-3">
                           Skill Gaps {jobDescription ? '(vs Job Description)' : '(Suggested)'}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                          {analysis.skillGaps.map((gap, i) => (
+                          {(analysis.skillGaps ?? []).map((gap, i) => (
                             <span key={i} className={`text-[9px] font-black px-3 py-1.5 rounded-xl border ${isDark ? 'bg-red-950/30 border-red-800/40 text-red-400' : 'bg-red-50 border-red-100 text-red-600'}`}>{gap}</span>
                           ))}
                         </div>
@@ -254,17 +275,19 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                     )}
 
                     {/* Improvement Tips */}
-                    <div>
-                      <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-3">Actionable Tips</p>
-                      <div className="space-y-2">
-                        {analysis.improvementTips.map((tip, i) => (
-                          <div key={i} className={`flex gap-3 p-3 rounded-xl border ${isDark ? 'bg-blue-950/20 border-blue-900/40' : 'bg-blue-50 border-blue-100'}`}>
-                            <span className="text-blue-400 font-black text-xs shrink-0">{i + 1}.</span>
-                            <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-blue-100' : 'text-blue-800'}`}>{tip}</p>
-                          </div>
-                        ))}
+                    {(analysis.improvementTips ?? []).length > 0 && (
+                      <div>
+                        <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-3">Actionable Tips</p>
+                        <div className="space-y-2">
+                          {(analysis.improvementTips ?? []).map((tip, i) => (
+                            <div key={i} className={`flex gap-3 p-3 rounded-xl border ${isDark ? 'bg-blue-950/20 border-blue-900/40' : 'bg-blue-50 border-blue-100'}`}>
+                              <span className="text-blue-400 font-black text-xs shrink-0">{i + 1}.</span>
+                              <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-blue-100' : 'text-blue-800'}`}>{tip}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -284,27 +307,27 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                     {/* Summary chips */}
                     <div className="flex flex-wrap gap-2">
                       <span className={`text-[9px] font-black px-3 py-1.5 rounded-xl border ${isDark ? 'bg-blue-950/30 border-blue-800/40 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                        {profile.yearsOfExperience} yr{profile.yearsOfExperience !== 1 ? 's' : ''} experience
+                        {profile.yearsOfExperience ?? 0} yr{(profile.yearsOfExperience ?? 0) !== 1 ? 's' : ''} experience
                       </span>
                       <span className={`text-[9px] font-black px-3 py-1.5 rounded-xl border ${isDark ? 'bg-purple-950/30 border-purple-800/40 text-purple-400' : 'bg-purple-50 border-purple-100 text-purple-600'}`}>
-                        {profile.seniorityLevel}
+                        {profile.seniorityLevel || 'Unknown level'}
                       </span>
-                      {profile.certifications.map((c, i) => (
+                      {(profile.certifications ?? []).map((c, i) => (
                         <span key={i} className={`text-[9px] font-black px-3 py-1.5 rounded-xl border ${isDark ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>{c}</span>
                       ))}
                     </div>
 
                     {/* Projects */}
-                    {profile.projects.length > 0 && (
+                    {(profile.projects ?? []).length > 0 && (
                       <div>
                         <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-3">Extracted Projects</p>
                         <div className="space-y-3">
-                          {profile.projects.map((p, i) => (
+                          {(profile.projects ?? []).map((p, i) => (
                             <div key={i} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                               <div className="flex items-start justify-between gap-3 mb-2">
                                 <p className={`font-black text-sm ${textPrimary}`}>{p.name}</p>
                                 <div className="flex flex-wrap gap-1 justify-end shrink-0">
-                                  {p.technologies.slice(0, 4).map((t, j) => (
+                                  {(p.technologies ?? []).slice(0, 4).map((t, j) => (
                                     <span key={j} className={`text-[8px] font-black px-2 py-0.5 rounded-lg border ${isDark ? 'bg-blue-950/40 border-blue-800/40 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>{t}</span>
                                   ))}
                                 </div>
@@ -318,11 +341,11 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                     )}
 
                     {/* Education */}
-                    {profile.education.length > 0 && (
+                    {(profile.education ?? []).length > 0 && (
                       <div>
                         <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-3">Education</p>
                         <div className="space-y-2">
-                          {profile.education.map((e, i) => (
+                          {(profile.education ?? []).map((e, i) => (
                             <div key={i} className={`flex items-center justify-between p-3 rounded-xl border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                               <div>
                                 <p className={`text-xs font-black ${textPrimary}`}>{e.degree} in {e.major}</p>
@@ -348,9 +371,9 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                     <span className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                     <span className="text-xs font-bold">Matching against job roles...</span>
                   </div>
-                ) : jobMatches && (
+                ) : (jobMatches ?? []).length > 0 ? (
                   <div className="space-y-3 animate-in fade-in duration-500">
-                    {jobMatches.map((match, i) => (
+                    {(jobMatches ?? []).map((match, i) => (
                       <div key={i} className={`rounded-xl border overflow-hidden ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
                         <button
                           onClick={() => setExpandedMatch(expandedMatch === i ? null : i)}
@@ -358,8 +381,8 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                         >
                           <div className="flex items-center gap-4 min-w-0">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                              match.matchScore >= 75 ? 'bg-emerald-500/20 text-emerald-400' :
-                              match.matchScore >= 55 ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'
+                              (match.matchScore ?? 0) >= 75 ? 'bg-emerald-500/20 text-emerald-400' :
+                              (match.matchScore ?? 0) >= 55 ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'
                             }`}>#{i + 1}</div>
                             <div className="min-w-0">
                               <p className={`font-black text-sm ${textPrimary} truncate`}>{match.role}</p>
@@ -369,9 +392,9 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                           <div className="flex items-center gap-3 shrink-0 ml-3">
                             <div className="flex items-center gap-2">
                               <div className="w-24 h-1.5 rounded-full overflow-hidden bg-slate-200/20">
-                                <div className={`h-full rounded-full transition-all ${match.matchScore >= 75 ? 'bg-emerald-400' : match.matchScore >= 55 ? 'bg-amber-400' : 'bg-slate-400'}`} style={{ width: `${match.matchScore}%` }} />
+                                <div className={`h-full rounded-full transition-all ${(match.matchScore ?? 0) >= 75 ? 'bg-emerald-400' : (match.matchScore ?? 0) >= 55 ? 'bg-amber-400' : 'bg-slate-400'}`} style={{ width: `${match.matchScore ?? 0}%` }} />
                               </div>
-                              <span className={`text-sm font-black w-10 text-right ${match.matchScore >= 75 ? 'text-emerald-400' : match.matchScore >= 55 ? 'text-amber-400' : 'text-slate-400'}`}>{match.matchScore}%</span>
+                              <span className={`text-sm font-black w-10 text-right ${(match.matchScore ?? 0) >= 75 ? 'text-emerald-400' : (match.matchScore ?? 0) >= 55 ? 'text-amber-400' : 'text-slate-400'}`}>{match.matchScore ?? 0}%</span>
                             </div>
                             <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedMatch === i ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}/></svg>
                           </div>
@@ -383,7 +406,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                               <div>
                                 <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-2">You already have</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {match.matchedSkills.map((s, j) => (
+                                  {(match.matchedSkills ?? []).map((s, j) => (
                                     <span key={j} className={`text-[8px] font-black px-2 py-1 rounded-lg border ${isDark ? 'bg-emerald-950/40 border-emerald-800/40 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>✓ {s}</span>
                                   ))}
                                 </div>
@@ -391,7 +414,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                               <div>
                                 <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-2">Skills to add</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {match.missingSkills.map((s, j) => (
+                                  {(match.missingSkills ?? []).map((s, j) => (
                                     <span key={j} className={`text-[8px] font-black px-2 py-1 rounded-lg border ${isDark ? 'bg-red-950/40 border-red-800/40 text-red-400' : 'bg-red-50 border-red-100 text-red-600'}`}>✗ {s}</span>
                                   ))}
                                 </div>
@@ -402,7 +425,7 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
                       </div>
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>
