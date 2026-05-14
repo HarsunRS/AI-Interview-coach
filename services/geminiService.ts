@@ -14,7 +14,9 @@ export class InterviewService {
   private ollamaChecked = false;
 
   private getAI() {
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const key = localStorage.getItem('ip_gemini_key') || process.env.API_KEY || '';
+    if (!key) throw new Error('No Gemini API key configured. Open Settings to add one.');
+    return new GoogleGenAI({ apiKey: key });
   }
 
   private async getAudioContext() {
@@ -636,7 +638,8 @@ ${history.substring(0, 12000)}`;
   async parseResumeIntelligence(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {
     try {
       return await this.parseResumeIntelligenceGemini(resumeText, jobDescription, techStack);
-    } catch {
+    } catch (e) {
+      console.error('[ResumeAnalyzer] Gemini parseResumeIntelligence failed:', e);
       return this.parseResumeIntelligenceOllama(resumeText, jobDescription);
     }
   }
@@ -767,10 +770,19 @@ RESUME:\n${resumeText.substring(0, 10000)}${jdPart}`;
   }
 
   async analyzeResume(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<ResumeAnalysis> {
+    let geminiError: unknown;
     try {
       return await this.analyzeResumeGemini(resumeText, jobDescription, techStack);
-    } catch {
-      return this.analyzeResumeOllama(resumeText, jobDescription);
+    } catch (e) {
+      geminiError = e;
+      console.error('[ResumeAnalyzer] Gemini analyzeResume failed:', e);
+    }
+    try {
+      return await this.analyzeResumeOllama(resumeText, jobDescription);
+    } catch (e) {
+      console.error('[ResumeAnalyzer] Ollama analyzeResume failed:', e);
+      const msg = geminiError instanceof Error ? geminiError.message : String(geminiError);
+      throw new Error(`Gemini: ${msg}`);
     }
   }
 

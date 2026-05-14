@@ -97,7 +97,8 @@ const ResumeAnalyzer: React.FC<ResumeAnalyzerProps> = ({ onBack, theme }) => {
     if (atsResult.status === 'fulfilled') {
       setAnalysis(atsResult.value);
     } else {
-      setError('Resume score analysis failed. Check your API key or try again.');
+      const reason = atsResult.reason instanceof Error ? atsResult.reason.message : String(atsResult.reason);
+      setError(`Analysis failed — ${reason}. Open Settings in the top bar to update your Gemini API key, or start Ollama locally as a fallback.`);
     }
     setIsAnalyzing(false);
 
