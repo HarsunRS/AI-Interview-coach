@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { InterviewHistoryItem, UserProfile } from '../types';
-import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from 'recharts';
+import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip, YAxis } from 'recharts';
 
 interface DashboardProps {
   onStart: () => void;
@@ -11,133 +10,143 @@ interface DashboardProps {
   theme: 'light' | 'dark';
 }
 
+const Icon: React.FC<{ path: React.ReactNode; className?: string }> = ({ path, className = '' }) => (
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    {path}
+  </svg>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({ onStart, onViewReport, history, profile, theme }) => {
   const chartData = history.slice().reverse().map(h => ({ name: h.date.split(',')[0], score: h.score }));
+  const averageScore = history.length ? Math.round(history.reduce((a, b) => a + b.score, 0) / history.length) : 0;
+  const bestScore = history.length ? Math.max(...history.map(h => h.score)) : 0;
+  const readiness = averageScore >= 85 ? 'Strong' : averageScore >= 70 ? 'Interview Ready' : averageScore >= 50 ? 'Building' : 'Not started';
 
-  const cardBg = theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100';
-  const textPrimary = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const textSecondary = theme === 'dark' ? 'text-slate-400' : 'text-slate-500';
+  const isDark = theme === 'dark';
+  const panel = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
+  const softPanel = isDark ? 'bg-slate-800/70 border-slate-700' : 'bg-slate-50 border-slate-200';
+  const textPrimary = isDark ? 'text-white' : 'text-slate-950';
+  const textSecondary = isDark ? 'text-slate-400' : 'text-slate-500';
 
   const stats = [
-    { label: 'Total Interviews', value: history.length, icon: '🎯', color: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Avg Score', value: history.length ? Math.round(history.reduce((a, b) => a + b.score, 0) / history.length) : 0, icon: '📈', color: 'bg-green-500/10 text-green-500' },
-    { label: 'Last Mock', value: history.length ? history[0].date.split(',')[0] : 'N/A', icon: '📅', color: 'bg-purple-500/10 text-purple-500' },
-    { label: 'Status', value: profile.experienceLevel.split(' ')[0], icon: '👤', color: 'bg-orange-500/10 text-orange-500' },
+    { label: 'Sessions', value: history.length, icon: <Icon path={<><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></>} /> },
+    { label: 'Average', value: `${averageScore}%`, icon: <Icon path={<><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></>} /> },
+    { label: 'Best', value: `${bestScore}%`, icon: <Icon path={<><path d="M12 2v20"/><path d="m17 5-5-3-5 3"/><path d="m17 19-5 3-5-3"/><path d="M2 12h20"/></>} /> },
+    { label: 'Readiness', value: readiness, icon: <Icon path={<><path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-5"/></>} /> },
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-5">
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
-            <img 
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.avatarSeed}`} 
-              className="relative w-16 h-16 rounded-full bg-slate-200 border-2 border-white shadow-xl" 
-              alt="Avatar" 
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 space-y-6 animate-in fade-in duration-500">
+      <section className={`${panel} border rounded-2xl p-6 md:p-8 shadow-sm`}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <img
+              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.avatarSeed || profile.name || 'User'}`}
+              className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200"
+              alt="Candidate avatar"
             />
-          </div>
-          <div>
-            <h2 className={`text-2xl font-black ${textPrimary}`}>Welcome back, {profile.name} 👋</h2>
-            <p className={`${textSecondary} text-sm font-medium`}>Unlock your potential with adaptive AI prep.</p>
-          </div>
-        </div>
-        <button onClick={onStart} className="w-full md:w-auto bg-blue-600 text-white px-8 py-3 rounded-2xl font-black shadow-xl shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all text-sm uppercase tracking-widest">
-          Start New Practice
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats.map((stat, i) => (
-          <div key={i} className={`${cardBg} p-5 rounded-3xl border shadow-sm flex items-center gap-4`}>
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl ${stat.color}`}>
-              {stat.icon}
-            </div>
             <div>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-              <p className={`text-lg font-black ${textPrimary}`}>{stat.value}</p>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Interview Dashboard</p>
+              <h2 className={`text-2xl md:text-3xl font-black ${textPrimary}`}>Welcome back, {profile.name || 'Candidate'}</h2>
+              <p className={`${textSecondary} text-sm font-medium mt-1`}>Practice follows your resume, projects, extracted skills, technical depth, then behavioral questions.</p>
             </div>
+          </div>
+          <button onClick={onStart} className="bg-blue-600 text-white px-7 py-4 rounded-xl font-black shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all text-xs uppercase tracking-widest">
+            Start New Practice
+          </button>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map(stat => (
+          <div key={stat.label} className={`${panel} border rounded-2xl p-5 shadow-sm`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center">{stat.icon}</div>
+              <p className={`text-xl font-black ${textPrimary}`}>{stat.value}</p>
+            </div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-4">{stat.label}</p>
           </div>
         ))}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className={`lg:col-span-2 ${cardBg} p-8 rounded-[2.5rem] border shadow-sm`}>
-          <div className="flex justify-between items-center mb-8">
-            <h3 className={`text-lg font-black ${textPrimary}`}>Interview History</h3>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100/10 px-3 py-1 rounded-full">Recent Sessions</span>
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`${panel} lg:col-span-2 border rounded-2xl p-6 shadow-sm`}>
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div>
+              <h3 className={`text-lg font-black ${textPrimary}`}>Recent Interviews</h3>
+              <p className="text-xs text-slate-400 font-bold">Review your score trend and report details.</p>
+            </div>
+            <span className={`${softPanel} border px-3 py-1 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest`}>Latest first</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100/10">
-                  <th className="pb-4">Date</th>
-                  <th className="pb-4">Mode</th>
-                  <th className="pb-4">Type</th>
-                  <th className="pb-4">Score</th>
-                  <th className="pb-4">Status</th>
-                  <th className="pb-4"></th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {history.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 italic">No practice sessions found yet. Let's start!</td>
-                  </tr>
-                ) : history.map((h) => (
-                  <tr key={h.id} className="border-b border-slate-100/10 last:border-0 group hover:bg-slate-50/5 transition-colors">
-                    <td className={`py-5 font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{h.date}</td>
-                    <td className={`py-5 font-black ${textPrimary}`}>{h.mode}</td>
-                    <td className={`py-5 ${textSecondary} font-medium`}>{h.roundType}</td>
-                    <td className={`py-5 font-black ${textPrimary}`}>{h.score}%</td>
-                    <td className="py-5">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase shadow-sm ${
-                        h.status === 'Strong' ? 'bg-green-100 text-green-700' : 
-                        h.status === 'Interview Ready' ? 'bg-blue-100 text-blue-700' : 
-                        h.status === 'Intermediate' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {h.status}
-                      </span>
-                    </td>
-                    <td className="py-5 text-right">
-                      <button 
-                        onClick={() => h.report && onViewReport(h.report)}
-                        className={`text-blue-600 font-black text-xs uppercase tracking-widest hover:underline ${h.report ? 'opacity-100' : 'opacity-20 cursor-not-allowed'}`}
-                      >
-                        Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="space-y-3">
+            {history.length === 0 ? (
+              <div className={`${softPanel} border rounded-2xl p-8 text-center`}>
+                <p className="text-sm font-bold text-slate-500">No practice sessions yet. Start one to build your report history.</p>
+              </div>
+            ) : history.map(item => (
+              <div key={item.id} className={`${softPanel} border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4`}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className={`font-black ${textPrimary}`}>{item.date}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.mode}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.roundType}</span>
+                  </div>
+                  <div className="h-2 bg-slate-200/60 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full" style={{ width: `${item.score}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className={`text-xl font-black ${textPrimary}`}>{item.score}%</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.status}</p>
+                  </div>
+                  <button
+                    onClick={() => item.report && onViewReport(item.report)}
+                    disabled={!item.report}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-30"
+                  >
+                    Details
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className={`${cardBg} p-8 rounded-[2.5rem] border shadow-sm flex flex-col`}>
-          <h3 className={`text-lg font-black ${textPrimary} mb-1`}>Performance Matrix</h3>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-8">Score momentum</p>
-          <div className="flex-1 min-h-[250px]">
+        <div className="space-y-6">
+          <div className={`${panel} border rounded-2xl p-6 shadow-sm`}>
+            <h3 className={`text-lg font-black ${textPrimary}`}>Extracted Skills</h3>
+            <p className="text-xs text-slate-400 font-bold mt-1 mb-5">Used to guide technical questions.</p>
+            <div className="flex flex-wrap gap-2">
+              {profile.techStack.length ? profile.techStack.slice(0, 12).map(skill => (
+                <span key={skill} className="px-3 py-2 rounded-xl bg-blue-600/10 text-blue-600 text-[10px] font-black uppercase tracking-widest">{skill}</span>
+              )) : (
+                <p className="text-xs font-bold text-slate-500">Upload a resume during setup to extract skills automatically.</p>
+              )}
+            </div>
+          </div>
+
+          <div className={`${panel} border rounded-2xl p-6 shadow-sm min-h-[280px]`}>
+            <h3 className={`text-lg font-black ${textPrimary}`}>Score Trend</h3>
+            <p className="text-xs text-slate-400 font-bold mb-5">Momentum across sessions.</p>
             {history.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">Analytics will appear here...</div>
+              <div className={`${softPanel} border h-44 rounded-2xl flex items-center justify-center text-xs font-bold text-slate-500`}>Chart appears after your first interview.</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: theme === 'dark' ? '#94a3b8' : '#64748b', fontWeight: 700 }} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: theme === 'dark' ? '#1e293b' : '#fff', border: 'none', borderRadius: '12px', fontSize: '10px' }}
-                  />
-                  <Bar dataKey="score" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: isDark ? '#94a3b8' : '#64748b', fontWeight: 700 }} axisLine={false} tickLine={false} />
+                    <YAxis hide domain={[0, 100]} />
+                    <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '12px' }} />
+                    <Bar dataKey="score" fill="#2563eb" radius={[8, 8, 0, 0]} barSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </div>
-          <div className="mt-6 p-5 bg-blue-600 rounded-3xl text-white shadow-lg shadow-blue-500/20">
-            <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">AI Tip</p>
-            <p className="text-[11px] font-medium leading-relaxed">"Your Technical depth is increasing! Focus on communication fluency next to reach 'Strong' status."</p>
-          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

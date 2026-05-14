@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('ip_session');
     setCurrentUser(null);
+    setReport(null);
     setView('auth');
   };
 
@@ -79,7 +80,7 @@ const App: React.FC = () => {
         <Dashboard profile={profile} history={history} onStart={() => setView('setup')} onViewReport={(rep) => { setReport(rep); setView('report'); }} theme={profile.theme} />
       )}
       {view === 'setup' && <SetupForm onStart={(p) => { setProfile(p); setView('interview'); }} onCancel={() => setView('dashboard')} theme={profile.theme} />}
-      {view === 'interview' && <ChatInterface profile={profile} onComplete={handleCompleteInterview} theme={profile.theme} />}
+      {view === 'interview' && <ChatInterface profile={profile} onComplete={handleCompleteInterview} onCancel={() => setView('dashboard')} theme={profile.theme} />}
       {view === 'loading' && (
         <div className="flex flex-col items-center justify-center h-[70vh] space-y-8 text-center animate-in fade-in duration-700">
           <div className="w-16 h-16 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>

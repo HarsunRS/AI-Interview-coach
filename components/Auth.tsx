@@ -19,26 +19,27 @@ const Auth: React.FC<AuthProps> = ({ onLogin, theme }) => {
     e.preventDefault();
     setError('');
 
+    const emailNorm = email.trim().toLowerCase();
     const savedUsers: UserAccount[] = JSON.parse(localStorage.getItem('ip_users') || '[]');
 
     if (isRegistering) {
-      if (savedUsers.find(u => u.email === email)) {
+      if (savedUsers.find(u => u.email.toLowerCase() === emailNorm)) {
         setError('User with this email already exists.');
         return;
       }
-      
+
       const newUser: UserAccount = {
-        email,
+        email: emailNorm,
         password,
         name,
         profile: { ...INITIAL_USER_PROFILE, name },
         history: []
       };
-      
+
       localStorage.setItem('ip_users', JSON.stringify([...savedUsers, newUser]));
       onLogin(newUser);
     } else {
-      const user = savedUsers.find(u => u.email === email && u.password === password);
+      const user = savedUsers.find(u => u.email.toLowerCase() === emailNorm && u.password === password);
       if (user) {
         onLogin(user);
       } else {

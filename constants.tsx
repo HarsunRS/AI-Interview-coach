@@ -23,7 +23,15 @@ export const PERSONAS: InterviewerPersona[] = [
 ];
 
 export const COMMON_SKILLS = [
-  'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java', 'SQL', 'Data Structures'
+  'JavaScript', 'TypeScript', 'React', 'Next.js', 'Node.js', 'Express',
+  'Python', 'Django', 'Flask', 'Java', 'Spring Boot', 'C++', 'C#',
+  'SQL', 'PostgreSQL', 'MongoDB', 'Firebase', 'AWS', 'Docker',
+  'Kubernetes', 'Git', 'REST API', 'GraphQL', 'Data Structures',
+  'System Design', 'Machine Learning', 'Deep Learning', 'Artificial Intelligence',
+  'Natural Language Processing', 'Computer Vision', 'TensorFlow', 'PyTorch',
+  'Scikit-learn', 'Pandas', 'NumPy', 'Matplotlib', 'Power BI', 'Tableau',
+  'HTML', 'CSS', 'Tailwind CSS', 'Bootstrap', 'Redux', 'MySQL', 'SQLite',
+  'Oracle', 'Linux', 'Jenkins', 'CI/CD', 'Figma', 'Agile'
 ];
 
 export const COMPANIES = [
@@ -43,7 +51,7 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   roundType: RoundType.TECHNICAL,
   interviewerPersonaId: 'aarav',
   preferredLanguage: 'English',
-  timeLimit: 30,
+  timeLimit: 10,
   theme: 'light',
   rolePreference: 'Overall Practice',
   interviewGoal: 'Check my preparation'

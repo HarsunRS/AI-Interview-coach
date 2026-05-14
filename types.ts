@@ -98,6 +98,7 @@ export interface Report {
     communication: string[];
   };
   questionBreakdown: QuestionEvaluation[];
+  improvementPlan?: ImprovementPlan;
 }
 
 export interface Message {
@@ -106,6 +107,43 @@ export interface Message {
   timestamp: Date;
   audioData?: string;
   timeLabel: string;
+}
+
+export interface ResumeAnalysis {
+  overallScore: number;
+  atsScore: number;
+  label: string;
+  strengths: string[];
+  weaknesses: string[];
+  skillGaps: string[];
+  improvementTips: string[];
+  keyHighlights: string[];
+}
+
+export interface SkillPriority {
+  skill: string;
+  currentLevel: string;
+  targetLevel: string;
+  resources: string[];
+}
+
+export interface WeeklyFocus {
+  week: string;
+  focus: string;
+  tasks: string[];
+}
+
+export interface PracticeQuestion {
+  topic: string;
+  question: string;
+  hint: string;
+}
+
+export interface ImprovementPlan {
+  prioritySkills: SkillPriority[];
+  weeklyPlan: WeeklyFocus[];
+  practiceQuestions: PracticeQuestion[];
+  quickWins: string[];
 }
 
 export interface InterviewHistoryItem {
