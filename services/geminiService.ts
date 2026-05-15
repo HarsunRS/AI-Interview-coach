@@ -639,9 +639,56 @@ ${history.substring(0, 12000)}`;
     try {
       return await this.parseResumeIntelligenceGemini(resumeText, jobDescription, techStack);
     } catch (e) {
-      console.error('[ResumeAnalyzer] Gemini parseResumeIntelligence failed:', e);
-      return this.parseResumeIntelligenceOllama(resumeText, jobDescription);
+      console.error('[Personalise] Gemini failed:', e);
     }
+    try {
+      return await this.parseResumeIntelligenceOllama(resumeText, jobDescription);
+    } catch (e) {
+      console.error('[Personalise] Ollama failed:', e);
+    }
+    // Both APIs unavailable — build a basic profile from extracted skills
+    return this.buildLocalResumeProfile(resumeText, techStack ?? []);
+  }
+
+  private buildLocalResumeProfile(resumeText: string, techStack: string[]): { resumeProfile: ResumeProfile; jobMatches: JobMatch[] } {
+    const yearsMatch = resumeText.match(/(\d+)\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:experience|exp)/i);
+    const years = yearsMatch ? parseInt(yearsMatch[1]) : 1;
+    const level = years >= 5 ? 'Senior' : years >= 3 ? 'Mid-level' : 'Junior';
+
+    // Extract project-like names: lines that look like section headers or "Project X" patterns
+    const projectNames = new Set<string>();
+    const patterns = [
+      /(?:^|\n)\s*(?:project|PROJECT)[:\s]+([A-Z][^\n]{2,50})/gm,
+      /(?:^|\n)\s*([A-Z][A-Za-z0-9 \-]{3,35}(?:\s+(?:App|System|Platform|Tool|API|Website|Bot|Engine|Dashboard)))/gm,
+    ];
+    for (const re of patterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(resumeText)) !== null) {
+        const name = m[1].trim();
+        if (name.split(' ').length <= 6) projectNames.add(name);
+      }
+    }
+
+    const projects = Array.from(projectNames).slice(0, 4).map(name => ({
+      name,
+      description: '',
+      technologies: techStack.slice(0, 3),
+      impact: '',
+    }));
+
+    return {
+      resumeProfile: {
+        yearsOfExperience: years,
+        seniorityLevel: level,
+        summary: techStack.length
+          ? `${level} developer with expertise in ${techStack.slice(0, 4).join(', ')}`
+          : 'Software developer',
+        projects,
+        education: [],
+        certifications: [],
+      },
+      jobMatches: [],
+    };
   }
 
   private async parseResumeIntelligenceGemini(resumeText: string, jobDescription?: string, techStack?: string[]): Promise<{ resumeProfile: ResumeProfile; jobMatches: JobMatch[] }> {

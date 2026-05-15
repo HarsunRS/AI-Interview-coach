@@ -31,6 +31,7 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
   const [personaliseEnabled, setPersonaliseEnabled] = useState(false);
   const [isPersonalising, setIsPersonalising] = useState(false);
   const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null);
+  const [personaliseMode, setPersonaliseMode] = useState<'full' | 'basic' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isDark = theme === 'dark';
@@ -127,13 +128,18 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
     if (!resumeText.trim()) return;
     setIsPersonalising(true);
     setResumeProfile(null);
+    setPersonaliseMode(null);
     try {
       const { resumeProfile: rp, jobMatches: jm } = await interviewService.parseResumeIntelligence(
         resumeText, jobDescription, techStack,
       );
       setResumeProfile(rp);
       setProfile(prev => ({ ...prev, resumeProfile: rp, jobMatches: jm }));
-    } catch {}
+      // 'basic' mode when no projects were extracted (local fallback used)
+      setPersonaliseMode(rp.projects.length > 0 ? 'full' : 'basic');
+    } catch (e) {
+      console.error('[Personalise] All methods failed:', e);
+    }
     setIsPersonalising(false);
   };
 
@@ -146,6 +152,7 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
       }
     } else {
       setResumeProfile(null);
+      setPersonaliseMode(null);
       setProfile(prev => ({ ...prev, resumeProfile: undefined, jobMatches: undefined }));
     }
   };
@@ -436,8 +443,8 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
                     </div>
                   )}
 
-                  {/* Success state */}
-                  {profile.resumeText && !isPersonalising && resumeProfile && (
+                  {/* Success: full AI extraction */}
+                  {profile.resumeText && !isPersonalising && resumeProfile && personaliseMode === 'full' && (
                     <div className="p-5 space-y-3 animate-in fade-in duration-500">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
@@ -450,36 +457,50 @@ const SetupForm: React.FC<SetupFormProps> = ({ onStart, onCancel, theme }) => {
                           </p>
                         </div>
                       </div>
-
-                      {resumeProfile.projects.length > 0 && (
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Will ask about</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {resumeProfile.projects.slice(0, 5).map((p, i) => (
-                              <span key={i} className="text-[9px] font-black px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-400">
-                                {p.name}
-                              </span>
-                            ))}
-                          </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Will ask about</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {resumeProfile.projects.slice(0, 5).map((p, i) => (
+                            <span key={i} className="text-[9px] font-black px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-400">
+                              {p.name}
+                            </span>
+                          ))}
                         </div>
-                      )}
-
+                      </div>
                       <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                        The interviewer will reference your specific projects, decisions, and tech choices — not generic questions.
+                        The interviewer will reference your specific projects, decisions, and tech choices.
                       </p>
                     </div>
                   )}
 
-                  {/* Failed state */}
-                  {profile.resumeText && !isPersonalising && !resumeProfile && (
-                    <div className="p-5 flex items-center justify-between gap-3">
-                      <p className="text-[11px] text-amber-400 font-bold">Personalisation failed. The interview will use your extracted skills instead.</p>
-                      <button
-                        onClick={() => runPersonalise(profile.resumeText, profile.jobDescription, profile.techStack)}
-                        className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-400 shrink-0"
-                      >
-                        Retry
-                      </button>
+                  {/* Success: basic local extraction (AI unavailable) */}
+                  {profile.resumeText && !isPersonalising && resumeProfile && personaliseMode === 'basic' && (
+                    <div className="p-5 space-y-3 animate-in fade-in duration-500">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-amber-400">Skill-based personalisation active</p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            AI unavailable — using {profile.techStack.length} extracted skills · {resumeProfile.seniorityLevel}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {profile.techStack.slice(0, 6).map((s, i) => (
+                          <span key={i} className="text-[9px] font-black px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400">{s}</span>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[10px] text-slate-500 font-medium">Questions will focus on your skill set. Add your API key in Settings for full project-level personalisation.</p>
+                        <button
+                          onClick={() => runPersonalise(profile.resumeText, profile.jobDescription, profile.techStack)}
+                          className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-400 shrink-0"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
