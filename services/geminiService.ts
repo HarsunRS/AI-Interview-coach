@@ -160,18 +160,26 @@ export class InterviewService {
     const fillerMatches = answers.join(' ').match(/\b(um|uh|like|actually|basically|you know|sort of|kind of)\b/gi) || [];
     const emptyAnswers = answers.filter(answer => /^(no answer captured\.?)$/i.test(answer.trim())).length;
 
-    const communication = Math.max(45, Math.min(86, Math.round(58 + averageWords * 0.7 - fillerMatches.length * 2 - emptyAnswers * 10)));
-    const technicalAccuracy = Math.max(45, Math.min(84, Math.round(communication - 3 + Math.min(12, pairs.length * 2))));
-    const fluency = Math.max(45, Math.min(88, Math.round(communication + (fillerMatches.length ? -4 : 6))));
-    const confidence = Math.max(45, Math.min(86, Math.round(communication + (averageWords > 35 ? 5 : -3))));
-    const problemSolving = Math.max(45, Math.min(84, Math.round((technicalAccuracy + communication) / 2)));
-    const pronunciation = Math.max(55, Math.min(85, fluency));
-    const overallScore = Math.round((technicalAccuracy + communication + problemSolving + confidence + pronunciation + fluency) / 6);
+    const communication = Math.max(20, Math.min(86, Math.round(45 + averageWords * 0.7 - fillerMatches.length * 2 - emptyAnswers * 15)));
+    const technicalAccuracy = Math.max(20, Math.min(84, Math.round(communication - 3 + Math.min(12, pairs.length * 2))));
+    const fluency = Math.max(20, Math.min(88, Math.round(communication + (fillerMatches.length ? -4 : 6))));
+    const confidence = Math.max(20, Math.min(86, Math.round(communication + (averageWords > 35 ? 5 : -3))));
+    const problemSolving = Math.max(20, Math.min(84, Math.round((technicalAccuracy + communication) / 2)));
+    const pronunciation = Math.max(20, Math.min(85, fluency));
+    // Overall score derived from per-question estimates
+    const perQuestionScores = pairs.map(pair => {
+      const wc = pair.userAnswer.split(/\s+/).filter(Boolean).length;
+      const isEmpty = /^(no answer captured\.?)$/i.test(pair.userAnswer.trim());
+      return isEmpty ? 5 : Math.max(20, Math.min(82, Math.round(40 + wc * 0.8)));
+    });
+    const overallScore = perQuestionScores.length > 0
+      ? Math.round(perQuestionScores.reduce((a, b) => a + b, 0) / perQuestionScores.length)
+      : Math.round((technicalAccuracy + communication + problemSolving + confidence + pronunciation + fluency) / 6);
 
     return {
       summary: 'The AI report service was temporarily unavailable, so this report was generated from the captured transcript. Use it as a practice summary, then generate another report when the model is available for deeper scoring.',
       overallScore,
-      label: overallScore >= 82 ? 'Interview Ready' : overallScore >= 68 ? 'Intermediate' : 'Beginner',
+      label: overallScore >= 85 ? 'Interview Ready' : overallScore >= 70 ? 'Strong' : overallScore >= 50 ? 'Intermediate' : 'Beginner',
       duration: 'Practice session',
       metrics: {
         technicalAccuracy,
@@ -215,10 +223,11 @@ export class InterviewService {
           type: 'Transcript-based',
           difficulty: index < 2 ? 'Easy' : index < 4 ? 'Medium' : 'Hard',
           correctness,
+          scoreJustification: wordCount > 20 ? 'Estimated from answer length — AI model was unavailable for deep scoring.' : 'Short answer; estimated low — expand with concrete examples.',
           duration: 'N/A',
-          tag: correctness >= 76 ? 'Excellent' : correctness >= 60 ? 'Partial' : 'Weak',
+          tag: correctness >= 75 ? 'Excellent' : correctness >= 45 ? 'Partial' : 'Weak',
           feedback: {
-            whatWentWell: wordCount > 20 ? ['You provided enough detail for the evaluator to understand your answer.'] : ['You completed the response.'],
+            whatWentWell: wordCount > 20 ? ['You provided enough detail for the evaluator to understand your answer.'] : [],
             areasToImprove: wordCount > 20 ? ['Add clearer outcomes, numbers, or tradeoffs where possible.'] : ['Expand the answer with a concrete example and result.']
           },
           interviewerNotes: 'Generated locally because the AI report model was unavailable.'
@@ -418,6 +427,32 @@ SESSION:
     }
   }
 
+  async transcribeAudio(blob: Blob): Promise<string> {
+    const ai = this.getAI();
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
+    const mimeType = (blob.type || 'audio/webm').split(';')[0];
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Transcribe this audio exactly as spoken. Return only the transcribed text — no commentary, no labels.' }
+        ]
+      }]
+    });
+    const text = response.text?.trim() ?? '';
+    if (!text) throw new Error('empty transcript');
+    return text;
+  }
+
   async generateReport(history: string): Promise<Report> {
     if (!history || history.trim().length < 10) {
       throw new Error("Insufficient session data to generate an audit.");
@@ -427,12 +462,29 @@ SESSION:
       const ai = this.getAI();
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Perform an exhaustive professional evaluation based on this interview transcript. 
-        If the transcript is short, provide the best possible estimation of readiness.
-        Return a valid JSON object matching the required schema.
+        contents: `You are a strict, honest interview evaluator. Score the candidate accurately based solely on what they said. Do NOT inflate scores — weak answers get low scores.
 
-        TRANSCRIPT:
-        ${history}`,
+SCORING RUBRIC for each question's "correctness" (0–100):
+- 0–25:  No answer, "I don't know", completely irrelevant, or answer not captured
+- 26–45: Very weak — missing almost all key points, major factual errors
+- 46–60: Below average — touched the topic but missed critical concepts
+- 61–74: Average — covered some points but incomplete or imprecise
+- 75–84: Good — covered most key points with minor gaps
+- 85–94: Very good — thorough, correct, and well-structured
+- 95–100: Excellent — complete, precise, and insightful
+
+MANDATORY RULES:
+1. Score each question independently and honestly using the rubric above.
+2. "overallScore" = the mathematical average of all question correctness scores (round to nearest integer). Do not set it any other way.
+3. If the candidate said nothing or answered poorly across all questions, overallScore will naturally be low — that is correct.
+4. "userAnswer" must quote what the candidate actually said from the transcript.
+5. "idealAnswer" must list the 3–5 key points a strong answer would cover.
+6. "scoreJustification" must be one sentence explaining exactly why that score was given.
+7. "feedback.whatWentWell" should be empty if nothing was correct — do not fabricate positives.
+8. "tag": "Excellent" if correctness ≥ 75, "Partial" if 45–74, "Weak" if < 45.
+
+TRANSCRIPT:
+${history}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -464,6 +516,7 @@ SESSION:
                     idealAnswer: { type: Type.STRING },
                     difficulty: { type: Type.STRING },
                     correctness: { type: Type.NUMBER },
+                    scoreJustification: { type: Type.STRING },
                     tag: { type: Type.STRING },
                     feedback: {
                       type: Type.OBJECT,
@@ -537,28 +590,56 @@ SESSION:
       });
       const cleanText = response.text.replace(/```json|```/gi, '').trim();
       const parsed = JSON.parse(cleanText);
+
+      // Compute overall score from per-question scores — prevents AI inflation
+      const qBreakdown: any[] = parsed.questionBreakdown ?? [];
+      const scores = qBreakdown.map((q: any) => typeof q.correctness === 'number' ? q.correctness : 0);
+      const overallScore = scores.length > 0
+        ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length)
+        : Math.min(parsed.overallScore ?? 50, 50);
+
+      // Derive label from computed score, not AI's guess
+      const label = overallScore >= 85 ? 'Interview Ready'
+        : overallScore >= 70 ? 'Strong'
+        : overallScore >= 50 ? 'Intermediate'
+        : 'Beginner';
+
+      // Enforce tag from correctness score
+      const normalizedBreakdown = qBreakdown.map((q: any) => ({
+        ...q,
+        tag: q.correctness >= 75 ? 'Excellent' : q.correctness >= 45 ? 'Partial' : 'Weak',
+        scoreJustification: q.scoreJustification || '',
+        feedback: {
+          whatWentWell: q.feedback?.whatWentWell ?? [],
+          areasToImprove: q.feedback?.areasToImprove ?? []
+        }
+      }));
+
       return {
         duration: parsed.duration || 'Practice session',
-        behavioralAnalysis: parsed.behavioralAnalysis || {
-          score: parsed.metrics?.communication || 70,
-          eyeContact: { score: 70, percentage: 'N/A', avg: 'N/A' },
-          bodyLanguage: { score: 70, posture: 'Not measured', gestures: 'Not measured' },
-          facialExpression: { score: 70, engagement: 'Not measured', nervousness: 'Not measured' },
-          setupQuality: { score: 70, lighting: 'Not measured' },
-          energyLevel: { score: 70, consistency: 'Not measured' }
+        behavioralAnalysis: {
+          score: parsed.metrics?.communication || 50,
+          eyeContact: { score: 50, percentage: 'N/A', avg: 'N/A' },
+          bodyLanguage: { score: 50, posture: 'Not measured', gestures: 'Not measured' },
+          facialExpression: { score: 50, engagement: 'Not measured', nervousness: 'Not measured' },
+          setupQuality: { score: 50, lighting: 'Not measured' },
+          energyLevel: { score: 50, consistency: 'Not measured' }
         },
         speechAnalysis: {
-          clarityScore: parsed.speechAnalysis?.clarityScore || parsed.metrics?.fluency || 70,
+          clarityScore: parsed.speechAnalysis?.clarityScore ?? parsed.metrics?.fluency ?? 50,
           pace: parsed.speechAnalysis?.pace || 'Optimal',
           fillerWordUsage: parsed.speechAnalysis?.fillerWordUsage || 'Moderate',
-          pronunciationGaps: parsed.speechAnalysis?.pronunciationGaps || []
+          pronunciationGaps: parsed.speechAnalysis?.pronunciationGaps ?? []
         },
         roadmap: {
-          technical: parsed.roadmap?.technical || ['Review the questions you answered weakly and practice concise examples.'],
-          communication: parsed.roadmap?.communication || ['Use a clear setup, action, result structure in longer answers.']
+          technical: parsed.roadmap?.technical ?? ['Review the questions you answered weakly and practice concise examples.'],
+          communication: parsed.roadmap?.communication ?? ['Use a clear setup, action, result structure in longer answers.']
         },
         improvementPlan: parsed.improvementPlan || undefined,
-        ...parsed
+        ...parsed,
+        overallScore,
+        label,
+        questionBreakdown: normalizedBreakdown
       };
     } catch {
       try {
@@ -570,36 +651,33 @@ SESSION:
   }
 
   private async generateReportWithOllama(history: string): Promise<Report> {
-    const prompt = `You are an expert interview evaluator. Analyze the transcript below and return ONLY a valid JSON object — no other text.
+    const prompt = `You are a strict, honest interview evaluator. Score the candidate based ONLY on what they said. Do NOT inflate scores.
 
-JSON structure:
+SCORING RUBRIC for correctness (0–100):
+- 0–25: No answer, "I don't know", irrelevant, or nothing captured
+- 26–45: Very weak, missing almost all key points
+- 46–60: Below average, touched topic but missed critical concepts
+- 61–74: Average, some points covered but incomplete
+- 75–84: Good, most key points covered
+- 85–94: Very good, thorough and correct
+- 95–100: Excellent, complete and insightful
+
+Return ONLY a valid JSON object — no other text:
 {
-  "summary": "<overall 2-sentence summary>",
-  "overallScore": <0-100>,
-  "label": "<Beginner|Intermediate|Interview Ready|Strong>",
+  "summary": "<honest 2-sentence summary of performance>",
+  "overallScore": <MUST equal average of all question correctness scores>,
+  "label": "<Beginner|Intermediate|Strong|Interview Ready>",
   "duration": "Practice session",
-  "metrics": {
-    "technicalAccuracy": <0-100>, "communication": <0-100>,
-    "problemSolving": <0-100>, "confidence": <0-100>,
-    "pronunciation": <0-100>, "fluency": <0-100>
-  },
-  "speechAnalysis": {
-    "clarityScore": <0-100>,
-    "pace": "<Too Fast|Too Slow|Optimal>",
-    "fillerWordUsage": "<High|Moderate|Low>",
-    "pronunciationGaps": []
-  },
-  "roadmap": {
-    "technical": ["<tip1>", "<tip2>"],
-    "communication": ["<tip1>", "<tip2>"]
-  },
+  "metrics": { "technicalAccuracy": <0-100>, "communication": <0-100>, "problemSolving": <0-100>, "confidence": <0-100>, "pronunciation": <0-100>, "fluency": <0-100> },
+  "speechAnalysis": { "clarityScore": <0-100>, "pace": "<Too Fast|Too Slow|Optimal>", "fillerWordUsage": "<High|Moderate|Low>", "pronunciationGaps": [] },
+  "roadmap": { "technical": ["<tip>"], "communication": ["<tip>"] },
   "questionBreakdown": [
     {
-      "questionText": "...", "userAnswer": "...", "idealAnswer": "...",
-      "type": "Technical", "difficulty": "<Easy|Medium|Hard>",
-      "correctness": <0-100>, "duration": "N/A",
-      "tag": "<Excellent|Partial|Weak>",
-      "feedback": { "whatWentWell": ["..."], "areasToImprove": ["..."] },
+      "questionText": "...", "userAnswer": "<quote from transcript>", "idealAnswer": "<3-5 key points>",
+      "type": "Technical", "difficulty": "<Easy|Medium|Hard>", "correctness": <0-100>,
+      "scoreJustification": "<one sentence why this score>",
+      "duration": "N/A", "tag": "<Excellent if >=75, Partial if 45-74, Weak if <45>",
+      "feedback": { "whatWentWell": ["<only list things actually said correctly>"], "areasToImprove": ["<specific gaps>"] },
       "interviewerNotes": "..."
     }
   ]
@@ -610,18 +688,32 @@ ${history.substring(0, 12000)}`;
 
     const raw = await this.ollamaChat([{ role: 'user', content: prompt }], true);
     const parsed = this.parseOllamaJson(raw);
+
+    const qBreakdown: any[] = parsed.questionBreakdown ?? [];
+    const scores = qBreakdown.map((q: any) => typeof q.correctness === 'number' ? q.correctness : 0);
+    const overallScore = scores.length > 0
+      ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length)
+      : Math.min(parsed.overallScore ?? 50, 50);
+    const label = overallScore >= 85 ? 'Interview Ready' : overallScore >= 70 ? 'Strong' : overallScore >= 50 ? 'Intermediate' : 'Beginner';
+    const normalizedBreakdown = qBreakdown.map((q: any) => ({
+      ...q,
+      tag: q.correctness >= 75 ? 'Excellent' : q.correctness >= 45 ? 'Partial' : 'Weak',
+      scoreJustification: q.scoreJustification || '',
+      feedback: { whatWentWell: q.feedback?.whatWentWell ?? [], areasToImprove: q.feedback?.areasToImprove ?? [] }
+    }));
+
     return {
       duration: 'Practice session',
       behavioralAnalysis: {
-        score: parsed.metrics?.communication ?? 70,
-        eyeContact: { score: 70, percentage: 'N/A', avg: 'N/A' },
-        bodyLanguage: { score: 70, posture: 'Not measured', gestures: 'Not measured' },
-        facialExpression: { score: 70, engagement: 'Not measured', nervousness: 'Not measured' },
-        setupQuality: { score: 70, lighting: 'Not measured' },
-        energyLevel: { score: 70, consistency: 'Not measured' },
+        score: parsed.metrics?.communication ?? 50,
+        eyeContact: { score: 50, percentage: 'N/A', avg: 'N/A' },
+        bodyLanguage: { score: 50, posture: 'Not measured', gestures: 'Not measured' },
+        facialExpression: { score: 50, engagement: 'Not measured', nervousness: 'Not measured' },
+        setupQuality: { score: 50, lighting: 'Not measured' },
+        energyLevel: { score: 50, consistency: 'Not measured' },
       },
       speechAnalysis: {
-        clarityScore: parsed.speechAnalysis?.clarityScore ?? parsed.metrics?.fluency ?? 70,
+        clarityScore: parsed.speechAnalysis?.clarityScore ?? parsed.metrics?.fluency ?? 50,
         pace: parsed.speechAnalysis?.pace ?? 'Optimal',
         fillerWordUsage: parsed.speechAnalysis?.fillerWordUsage ?? 'Moderate',
         pronunciationGaps: parsed.speechAnalysis?.pronunciationGaps ?? [],
@@ -632,6 +724,9 @@ ${history.substring(0, 12000)}`;
       },
       improvementPlan: parsed.improvementPlan,
       ...parsed,
+      overallScore,
+      label,
+      questionBreakdown: normalizedBreakdown,
     };
   }
 

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { UserProfile, Message } from '../types';
 import { PERSONAS } from '../constants';
 import { interviewService } from '../services/geminiService';
-import { whisperService } from '../services/whisperService';
 
 interface ChatInterfaceProps {
   profile: UserProfile;
@@ -46,7 +45,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
   const [micEnabled, setMicEnabled] = useState(true);
   const [camEnabled, setCamEnabled] = useState(true);
   const [micLevel, setMicLevel] = useState(0);
-  const [whisperReady, setWhisperReady] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [proctorLogs] = useState<ProctorLog[]>([]);
 
@@ -71,11 +69,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
   const permissionDeniedRef = useRef(false);
   const submittingRef = useRef(false);
   const isTranscribingRef = useRef(false);
+  const sessionExpiredRef = useRef(false);
   const inputRef = useRef('');
   const submitAnswerRef = useRef<() => void>(() => {});
   const currentQuestionRef = useRef('');
   const answerDurationRef = useRef(ANSWER_SECONDS_BY_MODE[profile.interviewMode] || 60);
-  const sessionExpiredRef = useRef(false);
   const isPausedRef = useRef(false);
 
   const persona = PERSONAS.find(p => p.id === profile.interviewerPersonaId) || PERSONAS[0];
@@ -248,14 +246,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
       rec.onstop = () => resolve();
       try { rec.stop(); } catch { resolve(); }
     });
-
     const chunks = [...audioChunksRef.current];
     audioChunksRef.current = [];
-    if (!chunks.length || !whisperReady) return '';
-
+    if (!chunks.length) return '';
     const mimeType = chunks[0]?.type || 'audio/webm';
     const blob = new Blob(chunks, { type: mimeType });
-    return whisperService.transcribe(blob).catch(() => '');
+    return interviewService.transcribeAudio(blob).catch(() => '');
   };
 
   const onSilenceDetected = async () => {
@@ -264,24 +260,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
     isListeningRef.current = false;
     try { recognitionRef.current?.stop(); } catch {}
 
-    // Get the current Web Speech result as immediate candidate
     const speechResult = `${speechFinalRef.current} ${interimTranscript}`.trim();
     setInterimTranscript('');
 
-    // If nothing captured at all, stay in answering state — don't wipe existing text
-    if (!speechResult && !audioChunksRef.current.length) {
-      setStatus('answering');
-      return;
-    }
+    if (!speechResult && !audioChunksRef.current.length) { setStatus('answering'); return; }
 
-    // Try Whisper for accuracy if ready; fall back to Web Speech result
-    if (whisperReady && audioChunksRef.current.length) {
+    // Show Web Speech result immediately, then refine with Gemini
+    if (speechResult) { inputRef.current = speechResult; setInput(speechResult); }
+
+    if (audioChunksRef.current.length) {
       isTranscribingRef.current = true;
       setStatus('transcribing');
-      const whisperText = await doTranscribe();
+      const geminiText = await doTranscribe();
       isTranscribingRef.current = false;
       if (sessionExpiredRef.current) { handleFinish(); return; }
-      const finalText = (whisperText && whisperText.length > 2) ? whisperText : speechResult;
+      const finalText = (geminiText && geminiText.length > 2) ? geminiText : speechResult;
       if (!finalText) { setStatus('answering'); return; }
       const norm = normalizeSpeechText(finalText);
       const normQ = normalizeSpeechText(currentQuestionRef.current);
@@ -293,14 +286,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
       const norm = normalizeSpeechText(speechResult);
       const normQ = normalizeSpeechText(currentQuestionRef.current);
       if (normQ.includes(norm) || norm.includes(normQ.slice(0, 80))) { setStatus('answering'); return; }
-      inputRef.current = speechResult;
-      setInput(speechResult);
     }
 
     setStatus('answering');
-    window.setTimeout(() => {
-      if (!submittingRef.current) submitAnswerRef.current();
-    }, 800);
+    window.setTimeout(() => { if (!submittingRef.current) submitAnswerRef.current(); }, 800);
   };
 
   const startSilenceDetection = () => {
@@ -344,7 +333,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
     setInterimTranscript('');
     inputRef.current = '';
 
-    // MediaRecorder — for Whisper transcription
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg;codecs=opus';
@@ -355,7 +343,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
       recorder.start(200);
     } catch {}
 
-    // Web Speech API — for live word display
     try { recognitionRef.current?.start(); } catch {}
 
     startSilenceDetection();
@@ -368,24 +355,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
     try { recognitionRef.current?.stop(); } catch {}
     const currentText = `${speechFinalRef.current} ${interimTranscript}`.trim();
     setInterimTranscript('');
-
     if (currentText) { inputRef.current = currentText; setInput(currentText); }
 
-    // Transcribe with Whisper in background if available
-    if (whisperReady && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      setStatus('transcribing');
-      isTranscribingRef.current = true;
-      doTranscribe().then(text => {
-        isTranscribingRef.current = false;
-        if (text && text.length > 2) { inputRef.current = text; setInput(text); }
-        setStatus('answering');
-      });
-    } else {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch {}
-      }
-      setStatus('answering');
+    // Transcribe in background; update input when done without blocking
+    if (audioChunksRef.current.length) {
+      doTranscribe().then(geminiText => {
+        if (geminiText && geminiText.length > 2) { inputRef.current = geminiText; setInput(geminiText); }
+      }).catch(() => {});
     }
+    setStatus('answering');
   };
 
   const toggleVoiceCapture = () => {
@@ -477,7 +455,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
   const submitAnswer = async () => {
     if (submittingRef.current || isTranscribingRef.current || status === 'thinking' || status === 'speaking' || status === 'initializing' || status === 'transcribing' || status === 'paused') return;
 
-    // If recording, stop and get best available transcription
     if (isListeningRef.current) {
       stopSilenceDetection();
       isListeningRef.current = false;
@@ -485,18 +462,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
       const speechResult = `${speechFinalRef.current} ${interimTranscript}`.trim();
       setInterimTranscript('');
 
-      if (whisperReady && audioChunksRef.current.length) {
-        setStatus('transcribing');
+      if (audioChunksRef.current.length) {
         isTranscribingRef.current = true;
-        const whisperText = await doTranscribe();
+        setStatus('transcribing');
+        const geminiText = await doTranscribe();
         isTranscribingRef.current = false;
         if (sessionExpiredRef.current) { handleFinish(); return; }
-        const finalText = (whisperText && whisperText.length > 2) ? whisperText : speechResult;
+        const finalText = (geminiText && geminiText.length > 2) ? geminiText : speechResult;
         if (finalText) { inputRef.current = finalText; setInput(finalText); }
       } else {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          try { mediaRecorderRef.current.stop(); } catch {}
-        }
         if (speechResult) { inputRef.current = speechResult; setInput(speechResult); }
       }
     }
@@ -563,9 +537,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
     initRef.current = true;
 
     const startSession = async () => {
-      // Load Whisper in background — don't block the interview
-      whisperService.load().then(() => setWhisperReady(true)).catch(() => {});
-
       let audioOk = false;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -627,11 +598,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
     if (status === 'initializing') return `Preparing ${persona.name}`;
     if (status === 'thinking') return 'Interviewer is preparing the next question';
     if (status === 'speaking') return 'Question is being asked';
-    if (status === 'answering') return `Your turn — type or turn voice on${!whisperReady ? ' · Whisper loading...' : ''}`;
-    if (status === 'transcribing') return 'Refining transcription with Whisper...';
+    if (status === 'answering') return 'Your turn — type or turn voice on';
+    if (status === 'transcribing') return 'Transcribing with Gemini...';
     if (status === 'paused') return 'Interview paused — press Resume to continue';
     if (status === 'permission_denied') return 'Microphone access denied';
-    return `Speak now — silence auto-submits${!whisperReady ? ' · Whisper loading' : ''}`;
+    return 'Speak now — silence auto-submits';
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -659,9 +630,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
               <span className={`h-2.5 w-2.5 rounded-full ${status === 'listening' ? 'bg-emerald-400 animate-pulse' : status === 'transcribing' ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
             </div>
             <p className="text-xs text-emerald-100/70 font-bold mt-3">
-              {status === 'transcribing' ? 'Refining with Whisper...'
-                : whisperReady ? 'Live + Whisper accuracy active'
-                : 'Live speech · Whisper loading in background'}
+              {status === 'transcribing' ? 'Gemini cloud transcription...'
+                : status === 'listening' ? 'Listening — speak your answer'
+                : 'Gemini STT ready'}
             </p>
           </div>
 
@@ -826,7 +797,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ profile, onComplete, onCa
                   : status === 'answering'
                     ? displayTranscript || 'Voice is paused. Type your answer or turn voice back on.'
                     : status === 'transcribing'
-                      ? input || 'Refining transcription...'
+                      ? <span className="text-amber-300/70">{input || 'Transcribing with Gemini...'}</span>
                       : status === 'paused'
                         ? <span className="text-amber-300/70">{lastQuestion || 'Interview is paused. Press Resume to continue.'}</span>
                         : lastQuestion || 'Waiting for the first question...'}

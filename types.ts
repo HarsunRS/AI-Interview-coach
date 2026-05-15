@@ -57,7 +57,8 @@ export interface QuestionEvaluation {
   idealAnswer: string;
   type: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
-  correctness: number; 
+  correctness: number;
+  scoreJustification: string;
   duration: string;
   tag: 'Excellent' | 'Partial' | 'Weak';
   feedback: {

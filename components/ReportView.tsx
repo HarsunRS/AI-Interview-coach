@@ -113,17 +113,36 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onReset, theme }) => {
                 onClick={() => setExpandedQuestion(expandedQuestion === index ? null : index)}
               >
                 <div className="flex items-center gap-6">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm ${isDark ? 'bg-slate-800 text-slate-200 border border-slate-700' : 'bg-slate-100 text-slate-500'}`}>{index + 1}</div>
+                  {/* Per-question score ring */}
+                  <div className="relative w-12 h-12 shrink-0">
+                    <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 48 48">
+                      <circle cx="24" cy="24" r="20" stroke={isDark ? '#1e293b' : '#f1f5f9'} strokeWidth="4" fill="transparent" />
+                      <circle cx="24" cy="24" r="20"
+                        stroke={question.correctness >= 75 ? '#10b981' : question.correctness >= 45 ? '#f59e0b' : '#ef4444'}
+                        strokeWidth="4" fill="transparent"
+                        strokeDasharray={125.6}
+                        strokeDashoffset={125.6 - (125.6 * question.correctness) / 100}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${question.correctness >= 75 ? 'text-emerald-400' : question.correctness >= 45 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {question.correctness}
+                    </span>
+                  </div>
                   <div>
                     <p className={`font-black text-sm mb-1 ${textPrimary}`}>{question.questionText}</p>
                     <div className="flex items-center gap-4 text-[10px] font-black uppercase text-slate-400">
                       <span>{question.difficulty} Level</span>
-                      <span>Score: {question.correctness}%</span>
+                      {question.scoreJustification && <span className="normal-case font-medium text-slate-500 max-w-xs truncate">{question.scoreJustification}</span>}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${question.tag === 'Excellent' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{question.tag}</span>
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
+                    question.tag === 'Excellent' ? 'bg-emerald-100 text-emerald-700' :
+                    question.tag === 'Weak' ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{question.tag}</span>
                   <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedQuestion === index ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
                 </div>
               </div>
@@ -131,10 +150,25 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onReset, theme }) => {
               {expandedQuestion === index && (
                 <div className={`p-10 pt-0 ${expandedBg} animate-in slide-in-from-top-2`}>
                   <div className="space-y-6 mt-4">
-                    <div className={`${softPanel} p-6 border rounded-2xl`}>
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Your Answer</p>
-                      <p className={`text-xs leading-relaxed font-medium ${textPrimary}`}>"{question.userAnswer}"</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`${softPanel} p-6 border rounded-2xl`}>
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Your Answer</p>
+                        <p className={`text-xs leading-relaxed font-medium ${textPrimary}`}>
+                          {question.userAnswer || 'No answer captured.'}
+                        </p>
+                      </div>
+                      <div className={`p-6 border rounded-2xl ${isDark ? 'bg-blue-950/30 border-blue-800/40' : 'bg-blue-50 border-blue-100'}`}>
+                        <p className="text-[10px] font-black text-blue-400 uppercase mb-2">What a Strong Answer Covers</p>
+                        <p className={`text-xs leading-relaxed font-medium ${isDark ? 'text-blue-100' : 'text-blue-800'}`}>{question.idealAnswer}</p>
+                      </div>
                     </div>
+
+                    {question.scoreJustification && (
+                      <div className={`p-4 border rounded-2xl ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Score Rationale</p>
+                        <p className={`text-xs font-medium ${textSecondary}`}>{question.scoreJustification}</p>
+                      </div>
+                    )}
 
                     {question.pronunciationFeedback && (
                       <div className={`p-6 border rounded-2xl ${isDark ? 'bg-indigo-950/40 border-indigo-700/50' : 'bg-indigo-50 border-indigo-100'}`}>
@@ -145,18 +179,22 @@ const ReportView: React.FC<ReportViewProps> = ({ report, onReset, theme }) => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className={`p-6 rounded-2xl border ${isDark ? 'bg-emerald-950/40 border-emerald-700/50' : 'bg-emerald-50 border-emerald-100'}`}>
-                        <h4 className="text-[10px] font-black text-emerald-500 uppercase mb-3">Correct Insights</h4>
-                        <ul className="space-y-2">
-                          {question.feedback.whatWentWell.map((item, itemIndex) => (
-                            <li key={itemIndex} className={`text-[10px] font-medium ${isDark ? 'text-emerald-100' : 'text-emerald-800'}`}>- {item}</li>
-                          ))}
-                        </ul>
+                        <h4 className="text-[10px] font-black text-emerald-500 uppercase mb-3">What You Got Right</h4>
+                        {(question.feedback.whatWentWell ?? []).length > 0 ? (
+                          <ul className="space-y-2">
+                            {question.feedback.whatWentWell.map((item, itemIndex) => (
+                              <li key={itemIndex} className={`text-[10px] font-medium ${isDark ? 'text-emerald-100' : 'text-emerald-800'}`}>+ {item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className={`text-[10px] font-medium ${isDark ? 'text-emerald-200/50' : 'text-emerald-700/60'}`}>Nothing to highlight for this answer.</p>
+                        )}
                       </div>
-                      <div className={`p-6 rounded-2xl border ${isDark ? 'bg-amber-950/40 border-amber-700/50' : 'bg-amber-50 border-amber-100'}`}>
-                        <h4 className="text-[10px] font-black text-amber-500 uppercase mb-3">Guidance</h4>
+                      <div className={`p-6 rounded-2xl border ${isDark ? 'bg-red-950/30 border-red-800/40' : 'bg-red-50 border-red-100'}`}>
+                        <h4 className="text-[10px] font-black text-red-500 uppercase mb-3">What You Missed</h4>
                         <ul className="space-y-2">
-                          {question.feedback.areasToImprove.map((item, itemIndex) => (
-                            <li key={itemIndex} className={`text-[10px] font-medium ${isDark ? 'text-amber-100' : 'text-amber-800'}`}>- {item}</li>
+                          {(question.feedback.areasToImprove ?? []).map((item, itemIndex) => (
+                            <li key={itemIndex} className={`text-[10px] font-medium ${isDark ? 'text-red-100' : 'text-red-800'}`}>✗ {item}</li>
                           ))}
                         </ul>
                       </div>
